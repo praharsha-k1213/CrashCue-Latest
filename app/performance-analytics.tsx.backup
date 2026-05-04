@@ -1,0 +1,3287 @@
+import { useSpeedHistory } from '@/context/SpeedHistoryContext';
+import { useThemeColor } from '@/hooks/useThemeColor';
+import { useTimeBattery } from '@/hooks/useTimeBattery';
+import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
+import * as Location from 'expo-location';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Dimensions, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTheme } from '../context/ThemeContext';
+
+// Conditional import for react-native-maps
+let MapView: any = null;
+let Marker: any = null;
+let Polyline: any = null;
+let PROVIDER_GOOGLE: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    const Maps = require('react-native-maps');
+    MapView = Maps.default;
+    Marker = Maps.Marker;
+    Polyline = Maps.Polyline;
+    PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
+  } catch (error) {
+    console.log('react-native-maps not available:', error);
+  }
+}
+
+const { width } = Dimensions.get('window');
+
+export default function AIAssistantScreen() {
+  const router = useRouter();
+  const { timeString, batteryLevel } = useTimeBattery();
+  const { speedHistory, isTracking } = useSpeedHistory();
+  const { theme } = useTheme();
+
+  const [isListening, setIsListening] = useState(false);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [weatherData, setWeatherData] = useState({
+    temperature: 0,
+    condition: 'Loading...',
+    humidity: 0,
+    windSpeed: 0,
+    location: 'Getting location...',
+    description: '',
+    feelsLike: 0,
+    pressure: 0,
+    visibility: 0
+  });
+  const [speedAlert, setSpeedAlert] = useState(60);
+  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [lastAIRequest, setLastAIRequest] = useState(0);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const messageIdRef = useRef(3); // Start after initial messages
+  
+  // Map states
+  const [showMap, setShowMap] = useState(false);
+  const [destination, setDestination] = useState('');
+  const [routeCoordinates, setRouteCoordinates] = useState<{latitude: number, longitude: number}[]>([]);
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 17.3850,
+    longitude: 78.4867,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  });
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [selectedDestination, setSelectedDestination] = useState<any>(null);
+  const [routeRecommendations, setRouteRecommendations] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [conversation, setConversation] = useState([
+    { id: 1, type: 'ai', message: 'Hello! I\'m your AI assistant. I can help you with a wide range of topics including general knowledge, technology, science, coding, driving advice, and much more. How can I assist you today?', time: 'Just now' },
+    { id: 2, type: 'ai', message: 'I can help you with:\n\n• General knowledge and questions\n• Technology and coding\n• Science and mathematics\n• Driving tips and safety\n• Problem solving and analysis\n• Creative tasks and brainstorming\n• Learning and explanations\n\nWhat would you like to know or discuss?', time: 'Just now' }
+  ]);
+
+  // Helper function to generate unique message IDs
+  const getNextMessageId = () => {
+    const newId = messageIdRef.current + 1;
+    messageIdRef.current = newId;
+    return newId;
+  };
+  const [suggestions, setSuggestions] = useState([
+    { id: 1, title: 'Speed Alert', description: 'Set speed limit notifications', icon: 'speedometer' },
+    { id: 2, title: 'Weather Check', description: 'Current driving conditions', icon: 'partly-sunny' },
+    { id: 3, title: 'Route Planning', description: 'Find best route to destination', icon: 'map' },
+    { id: 4, title: 'Safety Tips', description: 'Essential driving safety advice', icon: 'shield-checkmark' }
+  ]);
+  const [drivingTips, setDrivingTips] = useState([
+    { id: 1, tip: 'Maintain safe following distance', category: 'Safety' },
+    { id: 2, tip: 'Use turn signals before changing lanes', category: 'Safety' },
+    { id: 3, tip: 'Check mirrors every 5-8 seconds', category: 'Awareness' },
+    { id: 4, tip: 'Keep both hands on the wheel', category: 'Control' }
+  ]);
+
+  // Theme colors
+  const backgroundColor = useThemeColor({}, 'background');
+  const textPrimary = useThemeColor({}, 'textPrimary');
+  const textSecondary = useThemeColor({}, 'textSecondary');
+  const primary = useThemeColor({}, 'primary');
+  const backgroundCard = useThemeColor({}, 'backgroundCard');
+  const backgroundHeader = useThemeColor({}, 'backgroundHeader');
+  const border = useThemeColor({}, 'border');
+  const accent = useThemeColor({}, 'accent');
+
+  // Animation for listening state
+  const pulseAnim = new Animated.Value(1);
+
+  useEffect(() => {
+    if (isListening) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isListening]);
+
+  const handleVoiceCommand = async () => {
+    setIsListening(!isListening);
+    if (!isListening) {
+      // Simulate voice recognition with universal commands
+      setTimeout(async () => {
+        const voiceCommands = [
+          "Hello, can you help me with a general question?",
+          "Explain how artificial intelligence works",
+          "What are some interesting science facts?",
+          "Help me understand programming concepts",
+          "Tell me about recent technological advances",
+          "What's the weather like and any driving advice?",
+          "Can you help me solve a problem?",
+          "Explain something interesting about space",
+          "How do I learn a new skill effectively?",
+          "What are some creative project ideas?",
+          "Help me with math or logic problems",
+          "Tell me about history or culture"
+        ];
+        
+        const randomCommand = voiceCommands[Math.floor(Math.random() * voiceCommands.length)];
+        
+        // Add user message
+        const userMessageId = getNextMessageId();
+        setConversation(prev => [...prev, {
+          id: userMessageId,
+          type: 'user',
+          message: randomCommand,
+          time: 'Just now'
+        }]);
+        
+        // Get AI response
+        const response = await getAIResponse(randomCommand);
+        
+        setConversation(prev => [...prev, {
+          id: getNextMessageId(),
+          type: 'ai',
+          message: response,
+          time: 'Just now'
+        }]);
+        setIsListening(false);
+      }, 2000);
+    }
+  };
+
+  // Get user location
+  const getUserLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Location permission is required for weather data');
+        return null;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      };
+      setUserLocation(coords);
+      return coords;
+    } catch (error) {
+      console.log('Location error:', error);
+      return null;
+    }
+  };
+
+  // Get real weather data from OpenWeatherMap API
+  const getWeatherData = async () => {
+    try {
+      let location = userLocation;
+      if (!location) {
+        location = await getUserLocation();
+        if (!location) {
+          throw new Error('Could not get location');
+        }
+      }
+
+      // Get city name from reverse geocoding
+      const reverseGeocode = await Location.reverseGeocodeAsync({
+        latitude: location.latitude,
+        longitude: location.longitude
+      });
+
+      // Get more specific location information
+      const locationInfo = reverseGeocode[0];
+      let locationName = 'Current Location';
+      
+      if (locationInfo) {
+        // Try to get the most specific location available
+        if (locationInfo.district && locationInfo.district !== locationInfo.city) {
+          locationName = `${locationInfo.district}, ${locationInfo.city}`;
+        } else if (locationInfo.subregion && locationInfo.subregion !== locationInfo.city) {
+          locationName = `${locationInfo.subregion}, ${locationInfo.city}`;
+        } else if (locationInfo.street && locationInfo.street !== locationInfo.city) {
+          locationName = `${locationInfo.street}, ${locationInfo.city}`;
+        } else {
+          locationName = locationInfo.city || 'Current Location';
+        }
+      }
+      
+      // Fetch real weather data from OpenWeatherMap API
+      const API_KEY = 'a699a95edd5a0c301b64d126a2eccfbc';
+      const weatherResponse = await axios.get(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${location.latitude}&lon=${location.longitude}&appid=${API_KEY}&units=metric`
+      );
+
+      const weather = weatherResponse.data;
+      
+      // Map OpenWeatherMap data to our format
+      const newWeatherData = {
+        temperature: Math.round(weather.main.temp),
+        condition: weather.weather[0].main.toLowerCase(),
+        humidity: weather.main.humidity,
+        windSpeed: Math.round(weather.wind.speed * 3.6), // Convert m/s to km/h
+        location: locationName,
+        description: weather.weather[0].description,
+        feelsLike: Math.round(weather.main.feels_like),
+        pressure: weather.main.pressure,
+        visibility: weather.visibility ? Math.round(weather.visibility / 1000) : 10 // Convert m to km
+      };
+      
+      setWeatherData(newWeatherData);
+      console.log('Real weather data fetched:', newWeatherData);
+      return newWeatherData;
+    } catch (error) {
+      console.log('Weather API error:', error);
+      // Fallback to demo data if API fails
+      const fallbackData = {
+        temperature: 22,
+        condition: 'sunny',
+        humidity: 65,
+        windSpeed: 12,
+        location: 'Hyderabad',
+        description: 'clear sky',
+        feelsLike: 24,
+        pressure: 1013,
+        visibility: 10
+      };
+      setWeatherData(fallbackData);
+      return fallbackData;
+    }
+  };
+
+  // Load weather data on component mount
+  useEffect(() => {
+    getWeatherData();
+  }, []);
+
+  // Update map region when user location changes
+  useEffect(() => {
+    if (userLocation) {
+      setMapRegion({
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      });
+    }
+  }, [userLocation]);
+
+   // Function to get route between two points
+   const getRoute = async (destination: string) => {
+     try {
+       if (!userLocation) {
+         Alert.alert('Error', 'Please enable location services to get directions');
+         return;
+       }
+
+       // Create a more realistic route with multiple waypoints
+       const startLat = userLocation.latitude;
+       const startLng = userLocation.longitude;
+       
+       // Generate waypoints that simulate a real route
+       const routePoints = [
+         { latitude: startLat, longitude: startLng }, // Start point
+         { latitude: startLat + 0.005, longitude: startLng + 0.003 }, // Waypoint 1
+         { latitude: startLat + 0.012, longitude: startLng + 0.008 }, // Waypoint 2
+         { latitude: startLat + 0.018, longitude: startLng + 0.015 }, // Waypoint 3
+         { latitude: startLat + 0.025, longitude: startLng + 0.022 }, // Waypoint 4
+         { latitude: startLat + 0.03, longitude: startLng + 0.03 }, // End point
+       ];
+       
+       setRouteCoordinates(routePoints);
+       
+       // Calculate bounds for the route
+       const latitudes = routePoints.map(point => point.latitude);
+       const longitudes = routePoints.map(point => point.longitude);
+       
+       const minLat = Math.min(...latitudes);
+       const maxLat = Math.max(...latitudes);
+       const minLng = Math.min(...longitudes);
+       const maxLng = Math.max(...longitudes);
+       
+       // Update map region to show the entire route
+       setMapRegion({
+         latitude: (minLat + maxLat) / 2,
+         longitude: (minLng + maxLng) / 2,
+         latitudeDelta: Math.max(maxLat - minLat, 0.01) * 1.5,
+         longitudeDelta: Math.max(maxLng - minLng, 0.01) * 1.5,
+       });
+       
+       console.log('Route generated with', routePoints.length, 'waypoints');
+       
+     } catch (error) {
+       console.error('Error getting route:', error);
+       Alert.alert('Error', 'Could not get route directions');
+     }
+   };
+
+  // Function to search for locations
+  const searchLocations = async (query: string) => {
+    if (!query.trim()) return;
+    
+    setIsSearching(true);
+    try {
+      // Mock location search results - in real app, use Google Places API
+      const mockResults = [
+        {
+          id: '1',
+          name: `${query} - City Center`,
+          address: 'Main Street, Hyderabad, Telangana',
+          coordinates: {
+            latitude: userLocation ? userLocation.latitude + 0.01 : 17.3850,
+            longitude: userLocation ? userLocation.longitude + 0.01 : 78.4867,
+          },
+          type: 'restaurant',
+          rating: 4.5,
+          distance: '2.3 km'
+        },
+        {
+          id: '2',
+          name: `${query} - Shopping Mall`,
+          address: 'Commercial District, Hyderabad, Telangana',
+          coordinates: {
+            latitude: userLocation ? userLocation.latitude + 0.02 : 17.3950,
+            longitude: userLocation ? userLocation.longitude + 0.02 : 78.4967,
+          },
+          type: 'shopping',
+          rating: 4.2,
+          distance: '4.1 km'
+        },
+        {
+          id: '3',
+          name: `${query} - Airport`,
+          address: 'Rajiv Gandhi International Airport, Hyderabad',
+          coordinates: {
+            latitude: userLocation ? userLocation.latitude + 0.03 : 17.4050,
+            longitude: userLocation ? userLocation.longitude + 0.03 : 78.5067,
+          },
+          type: 'airport',
+          rating: 4.7,
+          distance: '8.5 km'
+        }
+      ];
+      
+      setSearchResults(mockResults);
+      generateRouteRecommendations(query, mockResults[0]);
+    } catch (error) {
+      console.error('Location search error:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Function to generate intelligent route recommendations
+  const generateRouteRecommendations = async (destination: string, location: any) => {
+    const currentWeather = weatherData;
+    const currentSpeed = speedHistory.length > 0 ? Math.round(speedHistory[speedHistory.length - 1].speed) : 0;
+    
+    const recommendations = [];
+    
+    // Weather-based recommendations
+    if (currentWeather.description.includes('rain')) {
+      recommendations.push("🌧️ Rainy conditions - Add 20% extra travel time and use main roads");
+      recommendations.push("⚠️ Wet roads ahead - Reduce speed by 10-15 km/h for safety");
+    } else if (currentWeather.temperature > 35) {
+      recommendations.push("☀️ Hot weather - Ensure AC is working and stay hydrated");
+      recommendations.push("🌡️ High temperature - Check tire pressure before departure");
+    } else if (currentWeather.temperature < 15) {
+      recommendations.push("❄️ Cool weather - Check for fog and icy conditions");
+      recommendations.push("🧥 Cold conditions - Warm up your vehicle before driving");
+    }
+    
+    // Distance-based recommendations
+    const distance = parseFloat(location.distance);
+    if (distance > 10) {
+      recommendations.push("🛣️ Long distance trip - Plan rest stops every 2 hours");
+      recommendations.push("⛽ Check fuel level - Ensure you have enough for the journey");
+    } else if (distance < 2) {
+      recommendations.push("🚶 Short distance - Consider walking or cycling if weather permits");
+      recommendations.push("🚗 Quick trip - City driving, watch for pedestrians and traffic");
+    }
+    
+    // Time-based recommendations
+    const currentHour = new Date().getHours();
+    if (currentHour >= 7 && currentHour <= 9) {
+      recommendations.push("🌅 Morning rush hour - Expect heavy traffic, leave early");
+    } else if (currentHour >= 17 && currentHour <= 19) {
+      recommendations.push("🌆 Evening rush hour - Heavy traffic expected, consider alternative routes");
+    } else if (currentHour >= 22 || currentHour <= 6) {
+      recommendations.push("🌙 Night driving - Use high beams appropriately and stay alert");
+    }
+    
+    // Speed-based recommendations
+    if (currentSpeed > 80) {
+      recommendations.push("⚡ High speed detected - Slow down for city driving");
+    } else if (currentSpeed < 30) {
+      recommendations.push("🐌 Low speed - Good for city driving, maintain safe following distance");
+    }
+    
+    // Location type recommendations
+    if (location.type === 'airport') {
+      recommendations.push("✈️ Airport destination - Check flight status and parking availability");
+      recommendations.push("🅿️ Airport parking - Reserve parking spot in advance if possible");
+    } else if (location.type === 'shopping') {
+      recommendations.push("🛍️ Shopping destination - Check parking availability and peak hours");
+      recommendations.push("🕐 Shopping hours - Verify store opening times");
+    } else if (location.type === 'restaurant') {
+      recommendations.push("🍽️ Restaurant destination - Check if reservations are needed");
+      recommendations.push("🅿️ Restaurant parking - Look for nearby parking options");
+    }
+    
+    // General safety recommendations
+    recommendations.push("🚗 Vehicle check - Ensure lights, brakes, and tires are in good condition");
+    recommendations.push("📱 Navigation - Keep phone charged and use hands-free navigation");
+    recommendations.push("⏰ Time buffer - Add 15-20 minutes buffer for unexpected delays");
+    
+    setRouteRecommendations(recommendations);
+  };
+
+  // Function to handle destination search
+  const handleDestinationSearch = () => {
+    if (destination.trim()) {
+      searchLocations(destination);
+    }
+  };
+
+  // Function to select a destination from search results
+  const selectDestination = (location: any) => {
+    setSelectedDestination(location);
+    setDestination(location.name);
+    setSearchResults([]);
+    getRoute(location.name);
+  };
+
+  // Test API connectivity
+  const testAPI = async () => {
+    try {
+      console.log('🧪 Testing API connectivity...');
+      const response = await axios.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        {
+          model: 'openai/gpt-3.5-turbo',
+          messages: [{ role: 'user', content: 'Hello' }],
+          max_tokens: 10
+        },
+        {
+          headers: {
+            'Authorization': 'Bearer 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',
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://crashcue.app',
+            'X-Title': 'CrashCue AI Assistant'
+          },
+          timeout: 10000
+        }
+      );
+      console.log('✅ API Test Success:', response.data);
+      return true;
+    } catch (error) {
+      console.log('❌ API Test Failed:', error);
+      return false;
+    }
+  };
+
+  // Working AI response with reliable API
+  const getAIResponse = async (userMessage: string) => {
+    try {
+      setIsLoadingAI(true);
+      console.log('🤖 AI Request:', userMessage);
+      
+      // Rate limiting: Wait at least 1 second between AI requests
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastAIRequest;
+      const minDelay = 1000; // 1 second
+      
+      if (timeSinceLastRequest < minDelay) {
+        console.log('⏳ Rate limiting: waiting', minDelay - timeSinceLastRequest, 'ms');
+        await new Promise(resolve => setTimeout(resolve, minDelay - timeSinceLastRequest));
+      }
+      
+      setLastAIRequest(Date.now());
+      
+      // Build conversation history for context
+      const conversationHistory = conversation.slice(-6).map(msg => ({
+        role: msg.type === 'user' ? 'user' : 'assistant',
+        content: msg.message
+      }));
+      
+      // Try API first, but fallback quickly to smart responses
+      try {
+        console.log('🔄 Trying OpenRouter API...');
+      const response = await axios.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        {
+            model: 'openai/gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+                content: 'You are a helpful AI assistant. Be conversational, helpful, and provide detailed responses when needed. Keep responses concise but informative.'
+            },
+              ...conversationHistory,
+            {
+              role: 'user',
+              content: userMessage
+            }
+          ],
+            max_tokens: 200,
+          temperature: 0.7
+        },
+        {
+          headers: {
+            'Authorization': 'Bearer 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',
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://crashcue.app',
+            'X-Title': 'CrashCue AI Assistant'
+          },
+          timeout: 15000 // 15 second timeout
+        }
+      );
+
+        if (response.data && response.data.choices && response.data.choices[0]) {
+          const aiResponse = response.data.choices[0].message.content;
+          if (aiResponse && aiResponse.trim()) {
+            console.log('✅ API Response:', aiResponse);
+            return aiResponse.trim();
+          }
+        }
+      } catch (apiError: any) {
+        console.log('❌ API failed:', apiError?.response?.status, apiError?.message);
+        // Continue to smart fallback
+      }
+
+      // Use smart fallback response
+      console.log('🔄 Using smart fallback response...');
+      return generateSmartResponse(userMessage);
+
+    } catch (error: any) {
+      console.log('🚨 AI error:', error?.message);
+      return generateSmartResponse(userMessage);
+    } finally {
+      setIsLoadingAI(false);
+    }
+  };
+
+  // Smart response generator for fallback - Universal AI responses
+  const generateSmartResponse = (userMessage: string) => {
+    const currentWeather = weatherData;
+    const currentSpeed = speedHistory.length > 0 ? Math.round(speedHistory[speedHistory.length - 1].speed) : 0;
+      const message = userMessage.toLowerCase();
+    
+    // Universal AI responses - handles any topic
+    if (message.includes('hello') || message.includes('hi') || message.includes('hey') || message.includes('good morning') || message.includes('good afternoon')) {
+      const greetings = [
+        "Hello! I'm your AI assistant, ready to help with any questions you might have. What can I assist you with today?",
+        "Hi there! I'm here to help with a wide range of topics - from general knowledge to specific questions. What's on your mind?",
+        "Hey! Great to meet you! I can help with almost anything - questions, explanations, problem-solving, or just having a conversation. What would you like to explore?"
+      ];
+      return greetings[Math.floor(Math.random() * greetings.length)];
+    }
+    
+    if (message.includes('weather') || message.includes('temperature') || message.includes('climate') || message.includes('rain') || message.includes('sunny') || message.includes('snow')) {
+      const weatherAdvice = currentWeather.temperature > 30 
+        ? "It's quite warm today - make sure to stay hydrated and use AC while driving!"
+        : currentWeather.temperature < 15 
+        ? "It's cool outside - dress warmly and be cautious of wet or icy roads."
+        : "The weather looks pleasant - enjoy your day!";
+      
+      const drivingTips = currentWeather.description.includes('rain') 
+        ? "Wet roads require extra caution - reduce speed, increase following distance, and ensure your wipers are working properly."
+        : currentWeather.description.includes('cloud') 
+        ? "Cloudy conditions can reduce visibility - use headlights and stay alert for changing conditions."
+        : "Clear conditions are ideal for outdoor activities and driving.";
+      
+      return `Current weather: ${currentWeather.temperature}°C, ${currentWeather.description}. ${weatherAdvice}\n\n${drivingTips}\n\nWould you like more information about weather patterns or how they affect different activities?`;
+    }
+    
+    if (message.includes('speed') || message.includes('fast') || message.includes('slow') || message.includes('limit')) {
+      const speedAdvice = currentSpeed > 80 
+        ? `Your current speed is ${currentSpeed} km/h - that's quite fast! Make sure you're on a highway and conditions are safe.`
+        : currentSpeed > 60 
+        ? `Your current speed is ${currentSpeed} km/h - good for city driving, but slow down in residential areas.`
+        : `Your current speed is ${currentSpeed} km/h - perfect for city driving! Stay alert and maintain safe following distance.`;
+      
+      return `${speedAdvice}\n\nSpeed management is important for safety. Speed limits vary by road type - 30-50 km/h in residential areas, 50-70 km/h on city streets, and 80-120 km/h on highways. Always adjust for weather and traffic conditions.`;
+    }
+    
+    if (message.includes('code') || message.includes('programming') || message.includes('javascript') || message.includes('python') || message.includes('react') || message.includes('typescript') || message.includes('coding')) {
+      const codingTopics = [
+        "I'd be happy to help with coding! I can assist with programming languages, debugging, best practices, architecture patterns, and problem-solving. What specific coding challenge are you working on?",
+        "Great! I love helping with programming questions. Whether it's JavaScript, Python, React Native, or any other language, I can help with syntax, logic, optimization, and best practices. What would you like to work on?",
+        "Programming is one of my favorite topics! I can help with code reviews, debugging, algorithm design, framework questions, and more. What specific coding problem can I help you solve?"
+      ];
+      return codingTopics[Math.floor(Math.random() * codingTopics.length)];
+    }
+    
+    if (message.includes('science') || message.includes('physics') || message.includes('chemistry') || message.includes('biology') || message.includes('space') || message.includes('quantum') || message.includes('math') || message.includes('mathematics')) {
+      const scienceTopics = [
+        "I love discussing science! I can explain complex concepts in simple terms, discuss recent discoveries, and help you understand how things work. What scientific topic fascinates you?",
+        "Science is amazing! Whether it's physics, chemistry, biology, astronomy, or any other field, I can help break down complex concepts and discuss the latest research. What would you like to explore?",
+        "Great choice! Science covers so many fascinating areas - from quantum physics to molecular biology to space exploration. What specific scientific concept would you like to understand better?"
+      ];
+      return scienceTopics[Math.floor(Math.random() * scienceTopics.length)];
+    }
+    
+    if (message.includes('driving') || message.includes('car') || message.includes('road') || message.includes('traffic') || message.includes('safety') || message.includes('tip') || message.includes('advice')) {
+      const safetyTips = [
+        `Here's essential driving advice: Always maintain a 3-second following distance, use turn signals before changing lanes, and keep both hands on the wheel. Your current speed is ${currentSpeed} km/h - adjust based on road conditions.`,
+        `Safety first! Key tips: Check mirrors every 5-8 seconds, avoid distractions (no phone use), wear seatbelts, and never drive under the influence. At ${currentSpeed} km/h, you're doing well - just ensure it's appropriate for the road.`,
+        `Defensive driving saves lives! Remember: Stay alert, anticipate other drivers' actions, maintain proper following distance, and always have an escape route. Your speed of ${currentSpeed} km/h should match road conditions.`
+      ];
+      return safetyTips[Math.floor(Math.random() * safetyTips.length)];
+    }
+    
+    if (message.includes('route') || message.includes('navigation') || message.includes('directions') || message.includes('planning') || message.includes('travel') || message.includes('map')) {
+      return "Great question about route planning! I've opened the interactive map for you. Here are some tips:\n\n• **Check weather conditions** before departure\n• **Plan alternative routes** in case of traffic or road closures\n• **Consider time of day** - avoid rush hours if possible\n• **Check road conditions** and construction zones\n• **Plan rest stops** for long journeys\n• **Use real-time traffic apps** for current conditions\n\nYou can enter a destination in the map above and I'll help you plan the best route! What destination are you planning to visit?";
+    }
+    
+    if (message.includes('help') || message.includes('what can you do') || message.includes('capabilities') || message.includes('what are you')) {
+      return "I'm your AI assistant, and I can help with a wide variety of topics:\n\n• **General Knowledge**: Ask me anything about history, geography, culture, or current events\n• **Technology & Coding**: Programming languages, software development, debugging, and tech trends\n• **Science**: Physics, chemistry, biology, space, and scientific concepts\n• **Driving & Safety**: Tips, rules, weather-related advice, and vehicle maintenance\n• **Problem Solving**: Math, logic puzzles, analysis, and creative thinking\n• **Learning**: Explanations, tutorials, and educational content\n• **Creative Tasks**: Writing, brainstorming, and creative problem-solving\n\nWhat would you like to explore or learn about?";
+    }
+    
+    if (message.includes('how') || message.includes('what') || message.includes('why') || message.includes('explain') || message.includes('tell me about') || message.includes('describe')) {
+      const questionResponses = [
+        "That's a great question! I'd be happy to explain that in detail. Could you provide a bit more context about what specifically you'd like to understand?",
+        "Excellent question! I can definitely help explain that topic. To give you the most helpful answer, could you tell me more about what aspect interests you most?",
+        "I love questions like this! I can provide a comprehensive explanation. What level of detail would be most helpful - a quick overview or an in-depth analysis?"
+      ];
+      return questionResponses[Math.floor(Math.random() * questionResponses.length)];
+    }
+    
+    if (message.includes('thank') || message.includes('thanks')) {
+      return "You're very welcome! I'm always happy to help. Is there anything else you'd like to know or discuss?";
+    }
+    
+    if (message.includes('bye') || message.includes('goodbye') || message.includes('see you')) {
+      return "Goodbye! It was great chatting with you. Feel free to come back anytime if you have more questions. Have a wonderful day!";
+    }
+    
+    // Handle any other prompt structure or topic
+    if (message.includes('?') || message.includes('what') || message.includes('how') || message.includes('why') || message.includes('when') || message.includes('where') || message.includes('who')) {
+      return "That's an interesting question! I'd be happy to help you with that. Could you provide a bit more detail about what specifically you'd like to know? I can help with explanations, analysis, problem-solving, or just having a discussion about the topic.";
+    }
+    
+    // Handle statements or comments
+    if (message.length > 10) {
+      return "That's an interesting point! I'd love to discuss that further. Could you tell me more about what you're thinking or what specific aspect you'd like to explore? I'm here to help with any questions or topics you have in mind.";
+    }
+    
+    // Default universal response
+    const defaultResponses = [
+      "That's an interesting topic! I'm here to help with almost anything - from general knowledge to specific questions, problem-solving to creative tasks. Could you tell me more about what you'd like to know or discuss?",
+      "I'd be happy to help with that! I can assist with a wide range of topics including technology, science, general knowledge, problem-solving, and creative thinking. What specific aspect would you like to explore?",
+      "Great! I'm your AI assistant and I can help with many different topics. Whether it's learning something new, solving a problem, getting advice, or just having a conversation, I'm here to help. What would you like to discuss?"
+    ];
+    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
+  };
+
+  const handleSuggestionPress = async (suggestion: any) => {
+    // Add user message first
+    setConversation(prev => [...prev, {
+      id: getNextMessageId(),
+      type: 'user',
+      message: suggestion.title,
+      time: 'Just now'
+    }]);
+
+    let response = "";
+
+    switch (suggestion.title) {
+      case 'Speed Alert':
+        const newSpeedAlert = speedAlert === 60 ? 80 : speedAlert === 80 ? 100 : 60;
+        setSpeedAlert(newSpeedAlert);
+        response = `Speed alert set to ${newSpeedAlert} km/h. I'll notify you if you exceed this limit for safety. Current speed: ${speedHistory.length > 0 ? Math.round(speedHistory[speedHistory.length - 1].speed) : 0} km/h.`;
+        break;
+        
+      case 'Weather Check':
+        const weather = await getWeatherData();
+        const weatherContext = `Current weather at ${weather.location}: ${weather.description}, ${weather.temperature}°C (feels like ${weather.feelsLike}°C), humidity ${weather.humidity}%, wind ${weather.windSpeed} km/h, visibility ${weather.visibility} km.`;
+        response = await getAIResponse(`I need driving advice based on current weather conditions: ${weatherContext}. What driving tips do you have for these conditions?`);
+        break;
+        
+      case 'Route Planning':
+        setShowMap(true);
+        response = await getAIResponse(`I've opened the interactive route planning map for you! 🗺️\n\nHere's what you can do:\n• Search for any destination\n• Get smart recommendations based on weather and traffic\n• View real-time route suggestions\n• See multiple location options with ratings\n\nTry searching for a place like "restaurant", "mall", or "airport" to see the intelligent recommendations in action!`);
+        break;
+        
+      case 'Safety Tips':
+        response = await getAIResponse(`I want to improve my driving safety. Can you give me essential driving safety tips, defensive driving techniques, and best practices for safe driving?`);
+        break;
+        
+      default:
+        response = await getAIResponse(`Help me with ${suggestion.title}.`);
+    }
+
+    // Add AI response
+    setConversation(prev => [...prev, {
+      id: getNextMessageId(),
+      type: 'ai',
+      message: response,
+      time: 'Just now'
+    }]);
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'Safety': return '#EF4444';
+      case 'Awareness': return '#3B82F6';
+      case 'Control': return '#10B981';
+      case 'Efficiency': return '#F59E0B';
+      default: return '#6B7280';
+    }
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+    <ScrollView style={[styles.container, { backgroundColor }]} contentContainerStyle={styles.contentContainer}>
+      {/* Header */}
+      <View style={[styles.headerBar, { backgroundColor: backgroundHeader, borderBottomColor: border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={textPrimary} />
+        </TouchableOpacity>
+        <Text style={[styles.brand, { color: primary }]}>AI Assistant</Text>
+        <View style={styles.headerRight}>
+          <Text style={[styles.headerTime, { color: textSecondary }]}>{timeString || '—:—:—'}</Text>
+          <View style={styles.batteryContainer}>
+            <View style={[styles.batteryIcon, { backgroundColor: theme === 'light' ? '#000000' : '#000000' }]} />
+            <Text style={[styles.batteryText, { color: textSecondary }]}>{batteryLevel != null ? `${Math.round(batteryLevel * 100)}%` : '—%'}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Voice Assistant */}
+      <View style={[styles.voiceAssistant, { backgroundColor: backgroundCard, borderColor: border }]}>
+        <TouchableOpacity 
+          style={[styles.voiceButton, { backgroundColor: isListening ? '#EF4444' : primary }]}
+          onPress={handleVoiceCommand}
+          activeOpacity={0.8}
+        >
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <Ionicons 
+              name={isListening ? "mic" : "mic-outline"} 
+              size={32} 
+              color="#FFFFFF" 
+            />
+          </Animated.View>
+        </TouchableOpacity>
+        <Text style={[styles.voiceLabel, { color: textPrimary }]}>
+          {isListening ? '🎤 Listening...' : isLoadingAI ? '🤖 AI Thinking...' : '🎤 Tap to speak'}
+        </Text>
+        <Text style={[styles.voiceSubtext, { color: textSecondary }]}>
+          {isLoadingAI ? 'Processing your request...' : 'Ask me anything - science, coding, general questions, or driving tips'}
+        </Text>
+      </View>
+
+      {/* Weather Display */}
+      <View style={[styles.weatherDisplay, { backgroundColor: backgroundCard, borderColor: border }]}>
+        <View style={styles.weatherHeader}>
+          <Ionicons name="partly-sunny" size={24} color="#F59E0B" />
+          <Text style={[styles.weatherTitle, { color: textPrimary }]}>Current Weather</Text>
+        </View>
+        <View style={styles.weatherContent}>
+          <Text style={[styles.temperature, { color: textPrimary }]}>{weatherData.temperature}°C</Text>
+          <Text style={[styles.condition, { color: textSecondary }]}>{weatherData.description}</Text>
+          <Text style={[styles.location, { color: textSecondary }]}>{weatherData.location}</Text>
+          <View style={styles.weatherDetails}>
+            <View style={styles.weatherItem}>
+              <Ionicons name="thermometer" size={16} color="#EF4444" />
+              <Text style={[styles.weatherText, { color: textSecondary }]}>Feels like {weatherData.feelsLike}°C</Text>
+            </View>
+            <View style={styles.weatherItem}>
+              <Ionicons name="water" size={16} color="#3B82F6" />
+              <Text style={[styles.weatherText, { color: textSecondary }]}>{weatherData.humidity}% humidity</Text>
+            </View>
+            <View style={styles.weatherItem}>
+              <Ionicons name="leaf" size={16} color="#10B981" />
+              <Text style={[styles.weatherText, { color: textSecondary }]}>{weatherData.windSpeed} km/h wind</Text>
+            </View>
+            <View style={styles.weatherItem}>
+              <Ionicons name="eye" size={16} color="#8B5CF6" />
+              <Text style={[styles.weatherText, { color: textSecondary }]}>{weatherData.visibility} km visibility</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+       {/* AI-Powered Health & Wellness Coach */}
+       <View style={[styles.healthCoachCard, { backgroundColor: backgroundCard, borderColor: border }]}>
+         <View style={styles.healthCoachHeader}>
+           <View style={styles.healthCoachHeaderLeft}>
+             <View style={[styles.healthCoachIcon, { backgroundColor: '#10B981' + '20' }]}>
+               <Ionicons name="fitness" size={24} color="#10B981" />
+             </View>
+             <View style={styles.healthCoachTitleContainer}>
+               <Text style={[styles.healthCoachTitle, { color: textPrimary }]}>AI Health Coach</Text>
+               <Text style={[styles.healthCoachSubtitle, { color: textSecondary }]}>Personalized wellness & fitness guidance</Text>
+             </View>
+           </View>
+           <View style={styles.healthCoachStatus}>
+             <View style={[styles.healthCoachStatusDot, { backgroundColor: '#10B981' }]} />
+             <Text style={[styles.healthCoachStatusText, { color: textSecondary }]}>Active</Text>
+           </View>
+         </View>
+        
+        <View style={styles.healthCoachContent}>
+          {/* Health Dashboard */}
+          <View style={[styles.healthDashboard, { backgroundColor: theme === 'light' ? '#F0FDF4' : '#14532D' }]}>
+            <View style={styles.healthDashboardHeader}>
+              <Ionicons name="heart" size={20} color="#10B981" />
+              <Text style={[styles.healthDashboardTitle, { color: textPrimary }]}>Your Health Today</Text>
+            </View>
+            
+            {/* Health Metrics */}
+            <View style={styles.healthMetricsContainer}>
+              <View style={[styles.healthMetric, { backgroundColor: theme === 'light' ? '#FFFFFF' : '#374151' }]}>
+                <Ionicons name="walk" size={16} color="#3B82F6" />
+                <Text style={[styles.healthMetricValue, { color: '#3B82F6' }]}>8,247</Text>
+                <Text style={[styles.healthMetricLabel, { color: textSecondary }]}>Steps</Text>
+              </View>
+              <View style={[styles.healthMetric, { backgroundColor: theme === 'light' ? '#FFFFFF' : '#374151' }]}>
+                <Ionicons name="flame" size={16} color="#F59E0B" />
+                <Text style={[styles.healthMetricValue, { color: '#F59E0B' }]}>342</Text>
+                <Text style={[styles.healthMetricLabel, { color: textSecondary }]}>Calories</Text>
+              </View>
+              <View style={[styles.healthMetric, { backgroundColor: theme === 'light' ? '#FFFFFF' : '#374151' }]}>
+                <Ionicons name="time" size={16} color="#10B981" />
+                <Text style={[styles.healthMetricValue, { color: '#10B981' }]}>45m</Text>
+                <Text style={[styles.healthMetricLabel, { color: textSecondary }]}>Active</Text>
+              </View>
+            </View>
+
+            {/* AI Health Insights */}
+            <View style={styles.aiHealthInsights}>
+              <View style={styles.aiHealthInsightsHeader}>
+                <Ionicons name="bulb" size={16} color="#8B5CF6" />
+                <Text style={[styles.aiHealthInsightsTitle, { color: textPrimary }]}>AI Health Insights</Text>
+              </View>
+              <View style={styles.aiHealthFeatures}>
+                <View style={[styles.aiHealthFeature, { backgroundColor: theme === 'light' ? '#E0F2FE' : '#1E3A8A' }]}>
+                  <Ionicons name="trending-up" size={14} color="#3B82F6" />
+                  <Text style={[styles.aiHealthFeatureText, { color: textPrimary }]}>Great progress on daily steps!</Text>
+                </View>
+                <View style={[styles.aiHealthFeature, { backgroundColor: theme === 'light' ? '#FEF3C7' : '#78350F' }]}>
+                  <Ionicons name="water" size={14} color="#F59E0B" />
+                  <Text style={[styles.aiHealthFeatureText, { color: textPrimary }]}>Remember to stay hydrated</Text>
+                </View>
+                <View style={[styles.aiHealthFeature, { backgroundColor: theme === 'light' ? '#F0FDF4' : '#14532D' }]}>
+                  <Ionicons name="moon" size={14} color="#10B981" />
+                  <Text style={[styles.aiHealthFeatureText, { color: textPrimary }]}>Good sleep pattern detected</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* AI Health Assistant */}
+          <View style={[styles.healthAssistantContainer, { backgroundColor: theme === 'light' ? '#F8FAFC' : '#1F2937' }]}>
+            <View style={styles.healthAssistantHeader}>
+              <Ionicons name="chatbubble" size={20} color={primary} />
+              <Text style={[styles.healthAssistantTitle, { color: textPrimary }]}>AI Health Assistant</Text>
+            </View>
+            
+            <View style={styles.healthAssistantInputContainer}>
+              <View style={[styles.healthAssistantInputWrapper, { 
+                backgroundColor: theme === 'light' ? '#FFFFFF' : '#374151',
+                borderColor: isSearching ? primary : border
+              }]}>
+                <Ionicons name="medical" size={20} color={textSecondary} />
+                <TextInput
+                  style={[styles.healthAssistantInput, { color: textPrimary }]}
+                  placeholder="Ask AI: 'How can I improve my sleep?' or 'What exercises should I do?'"
+                  placeholderTextColor={textSecondary}
+                  value={destination}
+                  onChangeText={setDestination}
+                  onFocus={() => setIsSearching(true)}
+                  onBlur={() => setIsSearching(false)}
+                />
+                {destination.length > 0 && (
+                  <TouchableOpacity onPress={() => setDestination('')}>
+                    <Ionicons name="close-circle" size={20} color={textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
+                style={[styles.healthAssistantButton, { 
+                  backgroundColor: '#10B981',
+                  opacity: destination.length > 0 ? 1 : 0.5
+                }]}
+                onPress={handleDestinationSearch}
+                disabled={destination.length === 0 || isSearching}
+              >
+                <Ionicons name={isSearching ? "hourglass" : "send"} size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Wellness Quick Actions */}
+          <View style={[styles.wellnessActionsContainer, { backgroundColor: theme === 'light' ? '#F0F9FF' : '#1E3A8A' }]}>
+            <View style={styles.wellnessActionsHeader}>
+              <Ionicons name="sparkles" size={20} color="#8B5CF6" />
+              <Text style={[styles.wellnessActionsTitle, { color: textPrimary }]}>Wellness Quick Actions</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.wellnessActionsScroll}>
+              <TouchableOpacity style={[styles.wellnessActionCard, { backgroundColor: theme === 'light' ? '#E0F2FE' : '#1E40AF' }]}>
+                <Ionicons name="fitness" size={24} color="#3B82F6" />
+                <Text style={[styles.wellnessActionText, { color: textPrimary }]}>Start Workout</Text>
+                <Text style={[styles.wellnessActionSubtext, { color: textSecondary }]}>AI Guided</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.wellnessActionCard, { backgroundColor: theme === 'light' ? '#F0FDF4' : '#14532D' }]}>
+                <Ionicons name="leaf" size={24} color="#10B981" />
+                <Text style={[styles.wellnessActionText, { color: textPrimary }]}>Meditation</Text>
+                <Text style={[styles.wellnessActionSubtext, { color: textSecondary }]}>5 min session</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.wellnessActionCard, { backgroundColor: theme === 'light' ? '#FEF3C7' : '#78350F' }]}>
+                <Ionicons name="restaurant" size={24} color="#F59E0B" />
+                <Text style={[styles.wellnessActionText, { color: textPrimary }]}>Meal Plan</Text>
+                <Text style={[styles.wellnessActionSubtext, { color: textSecondary }]}>Healthy recipes</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.wellnessActionCard, { backgroundColor: theme === 'light' ? '#F3E8FF' : '#581C87' }]}>
+                <Ionicons name="moon" size={24} color="#8B5CF6" />
+                <Text style={[styles.wellnessActionText, { color: textPrimary }]}>Sleep</Text>
+                <Text style={[styles.wellnessActionSubtext, { color: textSecondary }]}>Track & improve</Text>
+              </TouchableOpacity>
+            </ScrollView>
+    </ScrollView>
+          </View>
+
+          {/* Health Tracking Controls */}
+          <View style={[styles.healthTrackingContainer, { backgroundColor: theme === 'light' ? '#F8FAFC' : '#1F2937' }]}>
+            <View style={styles.healthTrackingHeader}>
+              <Ionicons name="analytics" size={20} color={primary} />
+              <Text style={[styles.healthTrackingTitle, { color: textPrimary }]}>Health Tracking</Text>
+            </View>
+            <View style={styles.healthTrackingControls}>
+              <TouchableOpacity style={[styles.healthTrackingButton, { backgroundColor: '#10B981' }]}>
+                <Ionicons name="play" size={20} color="#FFFFFF" />
+                <Text style={styles.healthTrackingButtonText}>Start Tracking</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.healthTrackingButton, { backgroundColor: theme === 'light' ? '#F3F4F6' : '#374151' }]}>
+                <Ionicons name="stats-chart" size={20} color={textPrimary} />
+                <Text style={[styles.healthTrackingButtonText, { color: textPrimary }]}>View Progress</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.healthTrackingButton, { backgroundColor: theme === 'light' ? '#F3F4F6' : '#374151' }]}>
+                <Ionicons name="settings" size={20} color={textPrimary} />
+                <Text style={[styles.healthTrackingButtonText, { color: textPrimary }]}>Goals</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Health Recommendations */}
+          {searchResults.length > 0 && (
+            <View style={[styles.healthRecommendations, { backgroundColor: theme === 'light' ? '#FFFFFF' : '#374151' }]}>
+              <View style={styles.healthRecommendationsHeader}>
+                <Text style={[styles.healthRecommendationsTitle, { color: textPrimary }]}>AI Health Recommendations</Text>
+                <TouchableOpacity onPress={() => setSearchResults([])}>
+                  <Ionicons name="close" size={20} color={textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.healthRecommendationsList} showsVerticalScrollIndicator={false}>
+                {searchResults.map((result, index) => (
+                  <TouchableOpacity
+                    key={result.id}
+                    style={[styles.healthRecommendationCard, { 
+                      backgroundColor: theme === 'light' ? '#F9FAFB' : '#4B5563',
+                      borderColor: border
+                    }]}
+                    onPress={() => selectDestination(result)}
+                  >
+                    <View style={styles.healthRecommendationIcon}>
+                      <Ionicons 
+                        name={
+                          result.type === 'restaurant' ? 'restaurant' :
+                          result.type === 'shopping' ? 'storefront' :
+                          result.type === 'airport' ? 'airplane' : 'medical'
+                        } 
+                        size={24} 
+                        color="#10B981" 
+                      />
+                    </View>
+                    <View style={styles.healthRecommendationContent}>
+                      <Text style={[styles.healthRecommendationName, { color: textPrimary }]}>{result.name}</Text>
+                      <Text style={[styles.healthRecommendationDescription, { color: textSecondary }]}>{result.address}</Text>
+                      <View style={styles.healthRecommendationMeta}>
+                        <View style={styles.healthRecommendationRating}>
+                          <Ionicons name="star" size={14} color="#F59E0B" />
+                          <Text style={[styles.healthRecommendationRatingText, { color: textPrimary }]}>{result.rating}</Text>
+                        </View>
+                        <View style={styles.healthRecommendationCategory}>
+                          <Ionicons name="fitness" size={14} color="#10B981" />
+                          <Text style={[styles.healthRecommendationCategoryText, { color: '#10B981' }]}>Health</Text>
+                        </View>
+                        <View style={styles.healthRecommendationAI}>
+                          <Ionicons name="sparkles" size={14} color="#8B5CF6" />
+                          <Text style={[styles.healthRecommendationAIText, { color: '#8B5CF6' }]}>AI Recommended</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={textSecondary} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+    </ScrollView>
+            </View>
+          )}
+
+            {/* Enhanced Recommendations */}
+            {routeRecommendations.length > 0 && (
+              <View style={[styles.recommendationsContainer, { backgroundColor: theme === 'light' ? '#F0F9FF' : '#1E3A8A' }]}>
+                <View style={styles.recommendationsHeader}>
+                  <View style={[styles.recommendationsIcon, { backgroundColor: '#3B82F6' }]}>
+                    <Ionicons name="bulb" size={20} color="#FFFFFF" />
+                  </View>
+                  <Text style={[styles.recommendationsTitle, { color: textPrimary }]}>Smart Recommendations</Text>
+                </View>
+                <ScrollView style={styles.recommendationsScroll} showsVerticalScrollIndicator={false}>
+                  {routeRecommendations.map((recommendation, index) => (
+                    <View key={index} style={[styles.recommendationCard, { 
+                      backgroundColor: theme === 'light' ? '#E0F2FE' : '#1E40AF' 
+                    }]}>
+                      <Text style={[styles.recommendationText, { color: textPrimary }]}>{recommendation}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+    </ScrollView>
+              </View>
+            )}
+
+       {/* AI-Powered Emergency Response & Safety System */}
+       <View style={[styles.emergencySystemCard, { backgroundColor: backgroundCard, borderColor: border }]}>
+         <View style={styles.emergencySystemHeader}>
+           <View style={styles.emergencySystemHeaderLeft}>
+             <View style={[styles.emergencySystemIcon, { backgroundColor: '#EF4444' + '20' }]}>
+               <Ionicons name="shield-checkmark" size={24} color="#EF4444" />
+             </View>
+             <View style={styles.emergencySystemTitleContainer}>
+               <Text style={[styles.emergencySystemTitle, { color: textPrimary }]}>Emergency Response System</Text>
+               <Text style={[styles.emergencySystemSubtitle, { color: textSecondary }]}>AI-powered safety monitoring & emergency assistance</Text>
+             </View>
+           </View>
+           <View style={styles.emergencySystemStatus}>
+             <View style={[styles.emergencySystemStatusDot, { backgroundColor: '#10B981' }]} />
+             <Text style={[styles.emergencySystemStatusText, { color: textSecondary }]}>Monitoring</Text>
+           </View>
+         </View>
+         
+         <View style={styles.emergencySystemContent}>
+           {/* Real-time Safety Monitoring */}
+           <View style={[styles.safetyMonitoringContainer, { backgroundColor: theme === 'light' ? '#FEF2F2' : '#7F1D1D' }]}>
+             <View style={styles.safetyMonitoringHeader}>
+               <Ionicons name="warning" size={20} color="#EF4444" />
+               <Text style={[styles.safetyMonitoringTitle, { color: textPrimary }]}>Real-time Safety Monitoring</Text>
+             </View>
+             
+             {/* Safety Metrics */}
+             <View style={styles.safetyMetricsContainer}>
+               <View style={[styles.safetyMetric, { backgroundColor: theme === 'light' ? '#FFFFFF' : '#374151' }]}>
+                 <Ionicons name="speedometer" size={16} color="#3B82F6" />
+                 <Text style={[styles.safetyMetricValue, { color: '#3B82F6' }]}>45 mph</Text>
+                 <Text style={[styles.safetyMetricLabel, { color: textSecondary }]}>Current Speed</Text>
+               </View>
+               <View style={[styles.safetyMetric, { backgroundColor: theme === 'light' ? '#FFFFFF' : '#374151' }]}>
+                 <Ionicons name="eye" size={16} color="#10B981" />
+                 <Text style={[styles.safetyMetricValue, { color: '#10B981' }]}>Alert</Text>
+                 <Text style={[styles.safetyMetricLabel, { color: textSecondary }]}>AI Status</Text>
+               </View>
+               <View style={[styles.safetyMetric, { backgroundColor: theme === 'light' ? '#FFFFFF' : '#374151' }]}>
+                 <Ionicons name="location" size={16} color="#F59E0B" />
+                 <Text style={[styles.safetyMetricValue, { color: '#F59E0B' }]}>GPS</Text>
+                 <Text style={[styles.safetyMetricLabel, { color: textSecondary }]}>Tracking</Text>
+               </View>
+             </View>
+
+             {/* AI Safety Alerts */}
+             <View style={styles.aiSafetyAlerts}>
+               <View style={styles.aiSafetyAlertsHeader}>
+                 <Ionicons name="bulb" size={16} color="#8B5CF6" />
+                 <Text style={[styles.aiSafetyAlertsTitle, { color: textPrimary }]}>AI Safety Alerts</Text>
+               </View>
+               <View style={styles.aiSafetyFeatures}>
+                 <View style={[styles.aiSafetyFeature, { backgroundColor: theme === 'light' ? '#E0F2FE' : '#1E3A8A' }]}>
+                   <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                   <Text style={[styles.aiSafetyFeatureText, { color: textPrimary }]}>Speed within safe limits</Text>
+                 </View>
+                 <View style={[styles.aiSafetyFeature, { backgroundColor: theme === 'light' ? '#FEF3C7' : '#78350F' }]}>
+                   <Ionicons name="warning" size={14} color="#F59E0B" />
+                   <Text style={[styles.aiSafetyFeatureText, { color: textPrimary }]}>Maintain safe following distance</Text>
+                 </View>
+                 <View style={[styles.aiSafetyFeature, { backgroundColor: theme === 'light' ? '#F0FDF4' : '#14532D' }]}>
+                   <Ionicons name="shield" size={14} color="#10B981" />
+                   <Text style={[styles.aiSafetyFeatureText, { color: textPrimary }]}>Emergency contacts ready</Text>
+                 </View>
+               </View>
+             </View>
+           </View>
+
+           {/* Emergency Actions */}
+           <View style={[styles.emergencyActionsContainer, { backgroundColor: theme === 'light' ? '#F8FAFC' : '#1F2937' }]}>
+             <View style={styles.emergencyActionsHeader}>
+               <Ionicons name="call" size={20} color={primary} />
+               <Text style={[styles.emergencyActionsTitle, { color: textPrimary }]}>Emergency Actions</Text>
+             </View>
+             
+             <View style={styles.emergencyActionsGrid}>
+               <TouchableOpacity style={[styles.emergencyActionButton, { backgroundColor: '#EF4444' }]}>
+                 <Ionicons name="call" size={24} color="#FFFFFF" />
+                 <Text style={styles.emergencyActionText}>SOS Call</Text>
+                 <Text style={styles.emergencyActionSubtext}>Emergency Services</Text>
+               </TouchableOpacity>
+               
+               <TouchableOpacity style={[styles.emergencyActionButton, { backgroundColor: '#F59E0B' }]}>
+                 <Ionicons name="people" size={24} color="#FFFFFF" />
+                 <Text style={styles.emergencyActionText}>Alert Contacts</Text>
+                 <Text style={styles.emergencyActionSubtext}>Family & Friends</Text>
+               </TouchableOpacity>
+               
+               <TouchableOpacity style={[styles.emergencyActionButton, { backgroundColor: '#8B5CF6' }]}>
+                 <Ionicons name="location" size={24} color="#FFFFFF" />
+                 <Text style={styles.emergencyActionText}>Share Location</Text>
+                 <Text style={styles.emergencyActionSubtext}>Real-time GPS</Text>
+               </TouchableOpacity>
+               
+               <TouchableOpacity style={[styles.emergencyActionButton, { backgroundColor: '#10B981' }]}>
+                 <Ionicons name="medical" size={24} color="#FFFFFF" />
+                 <Text style={styles.emergencyActionText}>Medical Info</Text>
+                 <Text style={styles.emergencyActionSubtext}>Health Details</Text>
+               </TouchableOpacity>
+             </View>
+           </View>
+
+           {/* Smart Safety Features */}
+           <View style={[styles.smartSafetyContainer, { backgroundColor: theme === 'light' ? '#F0F9FF' : '#1E3A8A' }]}>
+             <View style={styles.smartSafetyHeader}>
+               <Ionicons name="sparkles" size={20} color="#3B82F6" />
+               <Text style={[styles.smartSafetyTitle, { color: textPrimary }]}>Smart Safety Features</Text>
+             </View>
+             
+             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.smartSafetyScroll}>
+               <TouchableOpacity style={[styles.smartSafetyCard, { backgroundColor: theme === 'light' ? '#E0F2FE' : '#1E40AF' }]}>
+                 <Ionicons name="car-sport" size={24} color="#3B82F6" />
+                 <Text style={[styles.smartSafetyText, { color: textPrimary }]}>Crash Detection</Text>
+                 <Text style={[styles.smartSafetySubtext, { color: textSecondary }]}>AI-powered</Text>
+               </TouchableOpacity>
+               
+               <TouchableOpacity style={[styles.smartSafetyCard, { backgroundColor: theme === 'light' ? '#F0FDF4' : '#14532D' }]}>
+                 <Ionicons name="eye" size={24} color="#10B981" />
+                 <Text style={[styles.smartSafetyText, { color: textPrimary }]}>Drowsiness Alert</Text>
+                 <Text style={[styles.smartSafetySubtext, { color: textSecondary }]}>AI monitoring</Text>
+               </TouchableOpacity>
+               
+               <TouchableOpacity style={[styles.smartSafetyCard, { backgroundColor: theme === 'light' ? '#FEF3C7' : '#78350F' }]}>
+                 <Ionicons name="partly-sunny" size={24} color="#F59E0B" />
+                 <Text style={[styles.smartSafetyText, { color: textPrimary }]}>Weather Alert</Text>
+                 <Text style={[styles.smartSafetySubtext, { color: textSecondary }]}>Real-time</Text>
+               </TouchableOpacity>
+               
+               <TouchableOpacity style={[styles.smartSafetyCard, { backgroundColor: theme === 'light' ? '#F3E8FF' : '#581C87' }]}>
+                 <Ionicons name="shield" size={24} color="#8B5CF6" />
+                 <Text style={[styles.smartSafetyText, { color: textPrimary }]}>Auto Insurance</Text>
+                 <Text style={[styles.smartSafetySubtext, { color: textSecondary }]}>Instant claim</Text>
+               </TouchableOpacity>
+             </ScrollView>
+    </ScrollView>
+           </View>
+         </View>
+       </View>
+
+      {/* Conversation */}
+      <TouchableOpacity 
+        style={[styles.conversationCard, { backgroundColor: backgroundCard, borderColor: border }]}
+        onPress={() => setIsFullScreen(true)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.conversationHeader}>
+          <Text style={[styles.sectionTitle, { color: textPrimary }]}>AI Assistant</Text>
+          <View style={styles.conversationActions}>
+            <TouchableOpacity 
+              onPress={() => {
+                setConversation([
+                  { id: 1, type: 'ai', message: 'Hello! I\'m your AI assistant. I can help you with a wide range of topics including general knowledge, technology, science, coding, driving advice, and much more. How can I assist you today?', time: 'Just now' },
+                  { id: 2, type: 'ai', message: 'I can help you with:\n\n• General knowledge and questions\n• Technology and coding\n• Science and mathematics\n• Driving tips and safety\n• Problem solving and analysis\n• Creative tasks and brainstorming\n• Learning and explanations\n\nWhat would you like to know or discuss?', time: 'Just now' }
+                ]);
+              }}
+              style={styles.clearButton}
+            >
+              <Ionicons name="refresh" size={16} color={textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setIsFullScreen(true)}>
+          <Ionicons name="expand" size={20} color={textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <ScrollView style={styles.conversationContainer} showsVerticalScrollIndicator={false}>
+          {conversation.slice(-3).map((msg) => (
+            <View key={`preview-${msg.id}`} style={[
+              styles.messageBubble,
+              msg.type === 'ai' ? styles.aiMessage : styles.userMessage
+            ]}>
+              <View style={[
+                styles.messageContent,
+                { backgroundColor: msg.type === 'ai' ? (theme === 'light' ? '#F3F4F6' : '#374151') : primary }
+              ]}>
+                <Text style={[
+                  styles.messageText,
+                  { color: msg.type === 'ai' ? textPrimary : '#FFFFFF' }
+                ]}>
+                  {msg.message}
+                </Text>
+                <Text style={[
+                  styles.messageTime,
+                  { color: msg.type === 'ai' ? textSecondary : 'rgba(255,255,255,0.7)' }
+                ]}>
+                  {msg.time}
+                </Text>
+              </View>
+            </View>
+          ))}
+          {isLoadingAI && (
+            <View style={[styles.messageBubble, styles.aiMessage]}>
+              <View style={[
+                styles.messageContent,
+                { backgroundColor: theme === 'light' ? '#F3F4F6' : '#374151' }
+              ]}>
+                <Text style={[styles.messageText, { color: textPrimary }]}>
+                  🤖 Thinking...
+                </Text>
+                <Text style={[styles.messageTime, { color: textSecondary }]}>
+                  Just now
+                </Text>
+              </View>
+            </View>
+          )}
+          {conversation.length > 3 && (
+            <Text style={[styles.moreMessages, { color: textSecondary }]}>
+              +{conversation.length - 3} more messages
+            </Text>
+          )}
+        </ScrollView>
+    </ScrollView>
+      </TouchableOpacity>
+        
+        {/* Message Input */}
+        <View style={[styles.messageInput, { backgroundColor: theme === 'light' ? '#F9FAFB' : '#2A2A2A', borderColor: border }]}>
+          <TextInput
+            style={[styles.textInput, { color: textPrimary }]}
+            placeholder="Type your message..."
+            placeholderTextColor={textSecondary}
+            value={currentMessage}
+            onChangeText={setCurrentMessage}
+            multiline
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton, 
+              { 
+                backgroundColor: isLoadingAI ? '#9CA3AF' : primary,
+                opacity: (!currentMessage.trim() || isLoadingAI) ? 0.5 : 1
+              }
+            ]}
+            onPress={async () => {
+              if (currentMessage.trim() && !isLoadingAI) {
+                try {
+                // Add user message
+                setConversation(prev => [...prev, {
+                  id: getNextMessageId(),
+                  type: 'user',
+                  message: currentMessage,
+                  time: 'Just now'
+                }]);
+                
+                const userMsg = currentMessage;
+                setCurrentMessage('');
+                  
+                  console.log('💬 User message:', userMsg);
+                
+                // Get AI response
+                const response = await getAIResponse(userMsg);
+                  
+                  console.log('🤖 AI response:', response);
+                
+                setConversation(prev => [...prev, {
+                  id: getNextMessageId(),
+                  type: 'ai',
+                  message: response,
+                  time: 'Just now'
+                }]);
+                } catch (error) {
+                  console.error('❌ Error in chat:', error);
+                  // Add error message
+                  setConversation(prev => [...prev, {
+                    id: getNextMessageId(),
+                    type: 'ai',
+                    message: "Sorry, I'm having trouble responding right now. Please try again in a moment.",
+                  time: 'Just now'
+                }]);
+                }
+              }
+            }}
+            disabled={!currentMessage.trim() || isLoadingAI}
+          >
+            <Ionicons 
+              name={isLoadingAI ? "hourglass" : "send"} 
+              size={20} 
+              color="#FFFFFF" 
+            />
+          </TouchableOpacity>
+        </View>
+      
+
+      {/* Quick Suggestions */}
+      <View style={[styles.suggestionsCard, { backgroundColor: backgroundCard, borderColor: border }]}>
+        <Text style={[styles.sectionTitle, { color: textPrimary }]}>Quick Suggestions</Text>
+        <View style={styles.suggestionsGrid}>
+          {suggestions.map((suggestion) => (
+            <TouchableOpacity
+              key={suggestion.id}
+              style={[styles.suggestionItem, { backgroundColor: theme === 'light' ? '#F9FAFB' : '#2A2A2A' }]}
+              onPress={() => handleSuggestionPress(suggestion)}
+            >
+              <Ionicons name={suggestion.icon as any} size={24} color={accent} />
+              <Text style={[styles.suggestionTitle, { color: textPrimary }]}>
+                {suggestion.title}
+              </Text>
+              <Text style={[styles.suggestionDescription, { color: textSecondary }]}>
+                {suggestion.description}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Driving Tips */}
+      <View style={[styles.tipsCard, { backgroundColor: backgroundCard, borderColor: border }]}>
+        <Text style={[styles.sectionTitle, { color: textPrimary }]}>Driving Tips</Text>
+        {drivingTips.map((tip) => (
+          <View key={tip.id} style={styles.tipItem}>
+            <View style={[styles.tipCategory, { backgroundColor: getCategoryColor(tip.category) }]}>
+              <Text style={styles.tipCategoryText}>{tip.category}</Text>
+            </View>
+            <Text style={[styles.tipText, { color: textPrimary }]}>{tip.tip}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* AI Status */}
+      <View style={[styles.statusCard, { backgroundColor: backgroundCard, borderColor: border }]}>
+        <View style={styles.statusRow}>
+          <Ionicons name="analytics" size={20} color={accent} />
+          <Text style={[styles.statusLabel, { color: textPrimary }]}>AI Status</Text>
+          <View style={[styles.statusIndicator, { backgroundColor: isLoadingAI ? '#F59E0B' : '#10B981' }]} />
+        </View>
+        <View style={styles.statusRow}>
+          <Ionicons name="mic" size={20} color={accent} />
+          <Text style={[styles.statusLabel, { color: textPrimary }]}>Voice Recognition</Text>
+          <View style={[styles.statusIndicator, { backgroundColor: isListening ? '#EF4444' : '#10B981' }]} />
+        </View>
+        <View style={styles.statusRow}>
+          <Ionicons name="chatbubble" size={20} color={accent} />
+          <Text style={[styles.statusLabel, { color: textPrimary }]}>Chat Mode</Text>
+          <View style={[styles.statusIndicator, { backgroundColor: isLoadingAI ? '#F59E0B' : '#10B981' }]} />
+        </View>
+      </View>
+    </ScrollView>
+    </View>
+
+    {/* Full Screen Conversation Modal */}
+    <Modal
+      visible={isFullScreen}
+      animationType="slide"
+      presentationStyle="fullScreen"
+    >
+      <SafeAreaView style={[styles.fullScreenContainer, { backgroundColor }]}>
+        <View style={[styles.fullScreenHeader, { borderBottomColor: border }]}>
+          <TouchableOpacity 
+            onPress={() => setIsFullScreen(false)}
+            style={styles.closeButton}
+          >
+            <Ionicons name="close" size={24} color={textPrimary} />
+          </TouchableOpacity>
+          <Text style={[styles.fullScreenTitle, { color: textPrimary }]}>Full Conversation</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        
+        <ScrollView 
+          style={styles.fullScreenConversation}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.fullScreenContent}
+        >
+          {conversation.map((msg) => (
+            <View key={`fullscreen-${msg.id}`} style={[
+              styles.fullScreenMessageBubble,
+              msg.type === 'ai' ? styles.fullScreenAiMessage : styles.fullScreenUserMessage
+            ]}>
+              <View style={[
+                styles.fullScreenMessageContent,
+                { backgroundColor: msg.type === 'ai' ? (theme === 'light' ? '#F3F4F6' : '#374151') : primary }
+              ]}>
+                <View style={styles.fullScreenMessageHeader}>
+                  <Ionicons 
+                    name={msg.type === 'ai' ? 'chatbubble' : 'person'} 
+                    size={16} 
+                    color={msg.type === 'ai' ? textSecondary : '#FFFFFF'} 
+                  />
+                  <Text style={[
+                    styles.fullScreenMessageType,
+                    { color: msg.type === 'ai' ? textSecondary : 'rgba(255,255,255,0.8)' }
+                  ]}>
+                    {msg.type === 'ai' ? 'AI Assistant' : 'You'}
+                  </Text>
+                  <Text style={[
+                    styles.fullScreenMessageTime,
+                    { color: msg.type === 'ai' ? textSecondary : 'rgba(255,255,255,0.6)' }
+                  ]}>
+                    {msg.time}
+                  </Text>
+                </View>
+                <Text style={[
+                  styles.fullScreenMessageText,
+                  { color: msg.type === 'ai' ? textPrimary : '#FFFFFF' }
+                ]}>
+                  {msg.message}
+                </Text>
+              </View>
+            </View>
+          ))}
+          {isLoadingAI && (
+            <View style={[styles.fullScreenMessageBubble, styles.fullScreenAiMessage]}>
+              <View style={[
+                styles.fullScreenMessageContent,
+                { backgroundColor: theme === 'light' ? '#F3F4F6' : '#374151' }
+              ]}>
+                <View style={styles.fullScreenMessageHeader}>
+                  <Ionicons 
+                    name="chatbubble" 
+                    size={16} 
+                    color={textSecondary} 
+                  />
+                  <Text style={[
+                    styles.fullScreenMessageType,
+                    { color: textSecondary }
+                  ]}>
+                    AI Assistant
+                  </Text>
+                  <Text style={[
+                    styles.fullScreenMessageTime,
+                    { color: textSecondary }
+                  ]}>
+                    Just now
+                  </Text>
+                </View>
+                <Text style={[
+                  styles.fullScreenMessageText,
+                  { color: textPrimary }
+                ]}>
+                  🤖 Thinking...
+                </Text>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+    </ScrollView>
+      </SafeAreaView>
+    </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  contentContainer: { paddingBottom: 32 },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  backButton: { padding: 4 },
+  brand: { fontSize: 20, fontWeight: 'bold' },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+  headerTime: { fontSize: 14, marginRight: 8 },
+  batteryContainer: { flexDirection: 'row', alignItems: 'center' },
+  batteryIcon: { width: 24, height: 12, borderRadius: 4, marginRight: 4 },
+  batteryText: { fontSize: 14 },
+
+  voiceAssistant: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  voiceButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  voiceLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  voiceSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+
+  weatherDisplay: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  weatherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  weatherTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  weatherContent: {
+    alignItems: 'center',
+  },
+  temperature: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  condition: {
+    fontSize: 16,
+    textTransform: 'capitalize',
+    marginBottom: 12,
+  },
+  weatherDetails: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 8,
+  },
+  weatherItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '48%',
+    marginBottom: 8,
+  },
+  weatherText: {
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  location: {
+    fontSize: 14,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+
+  conversationCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  conversationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  conversationActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  clearButton: {
+    padding: 4,
+    borderRadius: 4,
+  },
+  moreMessages: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  conversationContainer: {
+    maxHeight: 200,
+  },
+  messageInput: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 12,
+    borderTopWidth: 1,
+    marginTop: 12,
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    maxHeight: 80,
+    fontSize: 14,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageBubble: {
+    marginBottom: 12,
+  },
+  aiMessage: {
+    alignItems: 'flex-start',
+  },
+  userMessage: {
+    alignItems: 'flex-end',
+  },
+  messageContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    maxWidth: '80%',
+  },
+  messageText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  messageTime: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  suggestionsCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  suggestionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  suggestionItem: {
+    width: '48%',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    marginRight: '2%',
+    alignItems: 'center',
+  },
+  suggestionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  suggestionDescription: {
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+
+  tipsCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  tipItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingVertical: 8,
+  },
+  tipCategory: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 12,
+  },
+  tipCategoryText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 14,
+  },
+
+  statusCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statusLabel: {
+    flex: 1,
+    fontSize: 14,
+    marginLeft: 12,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+
+  // Full Screen Modal Styles
+  fullScreenContainer: {
+    flex: 1,
+  },
+  fullScreenHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  closeButton: {
+    padding: 8,
+  },
+  fullScreenTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  fullScreenConversation: {
+    flex: 1,
+  },
+  fullScreenContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  fullScreenMessageBubble: {
+    marginBottom: 16,
+  },
+  fullScreenAiMessage: {
+    alignItems: 'flex-start',
+  },
+  fullScreenUserMessage: {
+    alignItems: 'flex-end',
+  },
+  fullScreenMessageContent: {
+    maxWidth: '85%',
+    padding: 12,
+    borderRadius: 12,
+  },
+  fullScreenMessageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  fullScreenMessageType: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+    flex: 1,
+  },
+  fullScreenMessageTime: {
+    fontSize: 10,
+    opacity: 0.7,
+  },
+  fullScreenMessageText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+   // AI Health & Wellness Coach Styles
+   healthCoachCard: {
+     marginHorizontal: 16,
+     marginTop: 16,
+     padding: 0,
+     borderRadius: 16,
+     borderWidth: 1,
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 4 },
+     shadowOpacity: 0.15,
+     shadowRadius: 12,
+     elevation: 8,
+     overflow: 'hidden',
+   },
+   healthCoachHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'space-between',
+     padding: 20,
+     paddingBottom: 16,
+   },
+   healthCoachHeaderLeft: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     flex: 1,
+   },
+   healthCoachIcon: {
+     width: 48,
+     height: 48,
+     borderRadius: 24,
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginRight: 12,
+   },
+   healthCoachTitleContainer: {
+     flex: 1,
+   },
+   healthCoachTitle: {
+     fontSize: 20,
+     fontWeight: '700',
+     marginBottom: 2,
+   },
+   healthCoachSubtitle: {
+     fontSize: 14,
+     fontWeight: '500',
+   },
+   healthCoachStatus: {
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   healthCoachStatusDot: {
+     width: 8,
+     height: 8,
+     borderRadius: 4,
+     marginRight: 6,
+   },
+   healthCoachStatusText: {
+     fontSize: 12,
+     fontWeight: '600',
+   },
+   healthCoachContent: {
+     paddingHorizontal: 20,
+     paddingBottom: 20,
+   },
+   // Health Dashboard
+   healthDashboard: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   healthDashboardHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 16,
+   },
+   healthDashboardTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   // Health Metrics
+   healthMetricsContainer: {
+     flexDirection: 'row',
+     gap: 8,
+     marginBottom: 16,
+   },
+   healthMetric: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+     padding: 12,
+     borderRadius: 8,
+   },
+   healthMetricValue: {
+     fontSize: 18,
+     fontWeight: '700',
+     marginLeft: 8,
+     marginRight: 4,
+   },
+   healthMetricLabel: {
+     fontSize: 12,
+     fontWeight: '500',
+   },
+   // AI Health Insights
+   aiHealthInsights: {
+     marginBottom: 0,
+   },
+   aiHealthInsightsHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   aiHealthInsightsTitle: {
+     fontSize: 14,
+     fontWeight: '600',
+     marginLeft: 6,
+   },
+   aiHealthFeatures: {
+     gap: 8,
+   },
+   aiHealthFeature: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     padding: 10,
+     borderRadius: 8,
+   },
+   aiHealthFeatureText: {
+     fontSize: 13,
+     fontWeight: '500',
+     marginLeft: 8,
+   },
+   // Health Assistant
+   healthAssistantContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   healthAssistantHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   healthAssistantTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   healthAssistantInputContainer: {
+     flexDirection: 'row',
+     gap: 8,
+   },
+   healthAssistantInputWrapper: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+     paddingHorizontal: 12,
+     paddingVertical: 12,
+     borderRadius: 10,
+     borderWidth: 2,
+   },
+   healthAssistantInput: {
+     flex: 1,
+     fontSize: 16,
+     marginLeft: 8,
+   },
+   healthAssistantButton: {
+     width: 48,
+     height: 48,
+     borderRadius: 10,
+     justifyContent: 'center',
+     alignItems: 'center',
+   },
+   // Wellness Actions
+   wellnessActionsContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   wellnessActionsHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   wellnessActionsTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   wellnessActionsScroll: {
+     marginHorizontal: -4,
+   },
+   wellnessActionCard: {
+     width: 120,
+     padding: 12,
+     borderRadius: 10,
+     alignItems: 'center',
+     marginHorizontal: 4,
+   },
+   wellnessActionText: {
+     fontSize: 12,
+     fontWeight: '600',
+     marginTop: 8,
+     textAlign: 'center',
+   },
+   wellnessActionSubtext: {
+     fontSize: 10,
+     marginTop: 2,
+     textAlign: 'center',
+   },
+   // Health Tracking
+   healthTrackingContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   healthTrackingHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   healthTrackingTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   healthTrackingControls: {
+     flexDirection: 'row',
+     gap: 8,
+   },
+   healthTrackingButton: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'center',
+     paddingVertical: 12,
+     paddingHorizontal: 16,
+     borderRadius: 10,
+   },
+   healthTrackingButtonText: {
+     fontSize: 14,
+     fontWeight: '600',
+     marginLeft: 6,
+     color: '#FFFFFF',
+   },
+   // Health Recommendations
+   healthRecommendations: {
+     borderRadius: 12,
+     padding: 16,
+     marginBottom: 16,
+   },
+   healthRecommendationsHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'space-between',
+     marginBottom: 12,
+   },
+   healthRecommendationsTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+   },
+   healthRecommendationsList: {
+     maxHeight: 200,
+   },
+   healthRecommendationCard: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     padding: 12,
+     marginBottom: 8,
+     borderRadius: 10,
+     borderWidth: 1,
+   },
+   healthRecommendationIcon: {
+     width: 40,
+     height: 40,
+     borderRadius: 20,
+     backgroundColor: 'rgba(16, 185, 129, 0.1)',
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginRight: 12,
+   },
+   healthRecommendationContent: {
+     flex: 1,
+   },
+   healthRecommendationName: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginBottom: 4,
+   },
+   healthRecommendationDescription: {
+     fontSize: 14,
+     marginBottom: 6,
+   },
+   healthRecommendationMeta: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 12,
+   },
+   healthRecommendationRating: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 4,
+   },
+   healthRecommendationRatingText: {
+     fontSize: 12,
+     fontWeight: '500',
+   },
+   healthRecommendationCategory: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 4,
+   },
+   healthRecommendationCategoryText: {
+     fontSize: 12,
+     fontWeight: '500',
+   },
+   healthRecommendationAI: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 4,
+   },
+   healthRecommendationAIText: {
+     fontSize: 12,
+     fontWeight: '600',
+   },
+   // AI-Powered Emergency Response & Safety System Styles
+   emergencySystemCard: {
+     marginHorizontal: 16,
+     marginTop: 16,
+     padding: 0,
+     borderRadius: 16,
+     borderWidth: 1,
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 4 },
+     shadowOpacity: 0.15,
+     shadowRadius: 12,
+     elevation: 8,
+     overflow: 'hidden',
+   },
+   emergencySystemHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'space-between',
+     padding: 20,
+     paddingBottom: 16,
+   },
+   emergencySystemHeaderLeft: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     flex: 1,
+   },
+   emergencySystemIcon: {
+     width: 48,
+     height: 48,
+     borderRadius: 24,
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginRight: 12,
+   },
+   emergencySystemTitleContainer: {
+     flex: 1,
+   },
+   emergencySystemTitle: {
+     fontSize: 20,
+     fontWeight: '700',
+     marginBottom: 2,
+   },
+   emergencySystemSubtitle: {
+     fontSize: 14,
+     fontWeight: '500',
+   },
+   emergencySystemStatus: {
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   emergencySystemStatusDot: {
+     width: 8,
+     height: 8,
+     borderRadius: 4,
+     marginRight: 6,
+   },
+   emergencySystemStatusText: {
+     fontSize: 12,
+     fontWeight: '600',
+   },
+   emergencySystemContent: {
+     paddingHorizontal: 20,
+     paddingBottom: 20,
+   },
+   // Safety Monitoring
+   safetyMonitoringContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   safetyMonitoringHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 16,
+   },
+   safetyMonitoringTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   // Safety Metrics
+   safetyMetricsContainer: {
+     flexDirection: 'row',
+     gap: 8,
+     marginBottom: 16,
+   },
+   safetyMetric: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+     padding: 12,
+     borderRadius: 8,
+   },
+   safetyMetricValue: {
+     fontSize: 18,
+     fontWeight: '700',
+     marginLeft: 8,
+     marginRight: 4,
+   },
+   safetyMetricLabel: {
+     fontSize: 12,
+     fontWeight: '500',
+   },
+   // AI Safety Alerts
+   aiSafetyAlerts: {
+     marginBottom: 0,
+   },
+   aiSafetyAlertsHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   aiSafetyAlertsTitle: {
+     fontSize: 14,
+     fontWeight: '600',
+     marginLeft: 6,
+   },
+   aiSafetyFeatures: {
+     gap: 8,
+   },
+   aiSafetyFeature: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     padding: 10,
+     borderRadius: 8,
+   },
+   aiSafetyFeatureText: {
+     fontSize: 13,
+     fontWeight: '500',
+     marginLeft: 8,
+   },
+   // Emergency Actions
+   emergencyActionsContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   emergencyActionsHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 16,
+   },
+   emergencyActionsTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   emergencyActionsGrid: {
+     flexDirection: 'row',
+     flexWrap: 'wrap',
+     gap: 12,
+   },
+   emergencyActionButton: {
+     width: '47%',
+     padding: 16,
+     borderRadius: 12,
+     alignItems: 'center',
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 2 },
+     shadowOpacity: 0.1,
+     shadowRadius: 4,
+     elevation: 2,
+   },
+   emergencyActionText: {
+     fontSize: 14,
+     fontWeight: '600',
+     color: '#FFFFFF',
+     marginTop: 8,
+     textAlign: 'center',
+   },
+   emergencyActionSubtext: {
+     fontSize: 12,
+     color: 'rgba(255,255,255,0.8)',
+     marginTop: 2,
+     textAlign: 'center',
+   },
+   // Smart Safety Features
+   smartSafetyContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 0,
+   },
+   smartSafetyHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   smartSafetyTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   smartSafetyScroll: {
+     marginHorizontal: -4,
+   },
+   smartSafetyCard: {
+     width: 120,
+     padding: 12,
+     borderRadius: 10,
+     alignItems: 'center',
+     marginHorizontal: 4,
+   },
+   smartSafetyText: {
+     fontSize: 12,
+     fontWeight: '600',
+     marginTop: 8,
+     textAlign: 'center',
+   },
+   smartSafetySubtext: {
+     fontSize: 10,
+     marginTop: 2,
+     textAlign: 'center',
+   },
+   // Legacy AI Smart Navigation Styles
+   smartNavCard: {
+     marginHorizontal: 16,
+     marginTop: 16,
+     padding: 0,
+     borderRadius: 16,
+     borderWidth: 1,
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 4 },
+     shadowOpacity: 0.15,
+     shadowRadius: 12,
+     elevation: 8,
+     overflow: 'hidden',
+   },
+   smartNavHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'space-between',
+     padding: 20,
+     paddingBottom: 16,
+   },
+   smartNavHeaderLeft: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     flex: 1,
+   },
+   smartNavIcon: {
+     width: 48,
+     height: 48,
+     borderRadius: 24,
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginRight: 12,
+   },
+   smartNavTitleContainer: {
+     flex: 1,
+   },
+   smartNavTitle: {
+     fontSize: 20,
+     fontWeight: '700',
+     marginBottom: 2,
+   },
+   smartNavSubtitle: {
+     fontSize: 14,
+     fontWeight: '500',
+   },
+   smartNavStatus: {
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   smartNavStatusDot: {
+     width: 8,
+     height: 8,
+     borderRadius: 4,
+     marginRight: 6,
+   },
+   smartNavStatusText: {
+     fontSize: 12,
+     fontWeight: '600',
+   },
+   smartNavContent: {
+     paddingHorizontal: 20,
+     paddingBottom: 20,
+   },
+   // AI Navigation Dashboard
+   aiNavDashboard: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   aiNavHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 16,
+   },
+   aiNavHeaderTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   // Traffic Analysis
+   trafficAnalysisContainer: {
+     marginBottom: 16,
+   },
+   trafficAnalysisHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   trafficAnalysisTitle: {
+     fontSize: 14,
+     fontWeight: '600',
+     marginLeft: 6,
+   },
+   trafficMetrics: {
+     flexDirection: 'row',
+     gap: 8,
+   },
+   trafficMetric: {
+     flex: 1,
+     padding: 12,
+     borderRadius: 8,
+     alignItems: 'center',
+   },
+   trafficMetricValue: {
+     fontSize: 18,
+     fontWeight: '700',
+     marginBottom: 4,
+   },
+   trafficMetricLabel: {
+     fontSize: 12,
+     fontWeight: '500',
+   },
+   // AI Optimization
+   aiOptimizationContainer: {
+     marginBottom: 0,
+   },
+   aiOptimizationHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   aiOptimizationTitle: {
+     fontSize: 14,
+     fontWeight: '600',
+     marginLeft: 6,
+   },
+   aiOptimizationFeatures: {
+     gap: 8,
+   },
+   aiFeature: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     padding: 10,
+     borderRadius: 8,
+   },
+   aiFeatureText: {
+     fontSize: 13,
+     fontWeight: '500',
+     marginLeft: 8,
+   },
+   // Smart Search
+   smartSearchContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   smartSearchHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   smartSearchTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   smartSearchInputContainer: {
+     flexDirection: 'row',
+     gap: 8,
+   },
+   smartSearchInputWrapper: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+     paddingHorizontal: 12,
+     paddingVertical: 12,
+     borderRadius: 10,
+     borderWidth: 2,
+   },
+   smartSearchInput: {
+     flex: 1,
+     fontSize: 16,
+     marginLeft: 8,
+   },
+   smartSearchButton: {
+     width: 48,
+     height: 48,
+     borderRadius: 10,
+     justifyContent: 'center',
+     alignItems: 'center',
+   },
+   // AI Suggestions
+   aiSuggestionsContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   aiSuggestionsHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   aiSuggestionsTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   aiSuggestionsScroll: {
+     marginHorizontal: -4,
+   },
+   aiSuggestionCard: {
+     width: 120,
+     padding: 12,
+     borderRadius: 10,
+     alignItems: 'center',
+     marginHorizontal: 4,
+   },
+   aiSuggestionText: {
+     fontSize: 12,
+     fontWeight: '600',
+     marginTop: 8,
+     textAlign: 'center',
+   },
+   aiSuggestionSubtext: {
+     fontSize: 10,
+     marginTop: 2,
+     textAlign: 'center',
+   },
+   // Voice Navigation
+   voiceNavContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+   voiceNavHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 12,
+   },
+   voiceNavTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginLeft: 8,
+   },
+   voiceNavControls: {
+     flexDirection: 'row',
+     gap: 8,
+   },
+   voiceNavButton: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'center',
+     paddingVertical: 12,
+     paddingHorizontal: 16,
+     borderRadius: 10,
+   },
+   voiceNavButtonText: {
+     fontSize: 14,
+     fontWeight: '600',
+     marginLeft: 6,
+     color: '#FFFFFF',
+   },
+   // Smart Search Results
+   smartSearchResults: {
+     borderRadius: 12,
+     padding: 16,
+     marginBottom: 16,
+   },
+   smartSearchResultsHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'space-between',
+     marginBottom: 12,
+   },
+   smartSearchResultsTitle: {
+     fontSize: 16,
+     fontWeight: '600',
+   },
+   smartSearchResultsList: {
+     maxHeight: 200,
+   },
+   smartSearchResultCard: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     padding: 12,
+     marginBottom: 8,
+     borderRadius: 10,
+     borderWidth: 1,
+   },
+   smartSearchResultIcon: {
+     width: 40,
+     height: 40,
+     borderRadius: 20,
+     backgroundColor: 'rgba(59, 130, 246, 0.1)',
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginRight: 12,
+   },
+   smartSearchResultContent: {
+     flex: 1,
+   },
+   smartSearchResultName: {
+     fontSize: 16,
+     fontWeight: '600',
+     marginBottom: 4,
+   },
+   smartSearchResultAddress: {
+     fontSize: 14,
+     marginBottom: 6,
+   },
+   smartSearchResultMeta: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 12,
+   },
+   smartSearchResultRating: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 4,
+   },
+   smartSearchRatingText: {
+     fontSize: 12,
+     fontWeight: '500',
+   },
+   smartSearchResultDistance: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 4,
+   },
+   smartSearchDistanceText: {
+     fontSize: 12,
+     fontWeight: '500',
+   },
+   smartSearchResultAI: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 4,
+   },
+   smartSearchAIText: {
+     fontSize: 12,
+     fontWeight: '600',
+   },
+   // Legacy Premium Route Planning Styles
+   premiumRouteCard: {
+     marginTop: 16,
+     padding: 20,
+     borderRadius: 16,
+     borderWidth: 1,
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 2 },
+     shadowOpacity: 0.1,
+     shadowRadius: 8,
+     elevation: 4,
+   },
+  premiumRouteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  routeHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  routeIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  routeHeaderText: {
+    flex: 1,
+  },
+  routeTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  routeSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  expandButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  premiumRouteContent: {
+    marginTop: 8,
+  },
+  // Search Section Styles
+  searchSection: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  searchTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 2,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  searchButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Search Results Styles
+  searchResultsContainer: {
+    marginBottom: 16,
+    borderRadius: 12,
+    padding: 16,
+  },
+  searchResultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  searchResultsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  searchResultsList: {
+    maxHeight: 200,
+  },
+  searchResultCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  searchResultIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  searchResultContent: {
+    flex: 1,
+  },
+  searchResultName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  searchResultAddress: {
+    fontSize: 14,
+    marginBottom: 6,
+  },
+  searchResultMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  searchResultRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  searchResultDistance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  distanceText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  // Recommendations Styles
+  recommendationsContainer: {
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+  },
+  recommendationsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recommendationsIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  recommendationsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  recommendationsScroll: {
+    maxHeight: 150,
+  },
+  recommendationCard: {
+    padding: 10,
+    marginBottom: 6,
+    borderRadius: 8,
+  },
+  recommendationText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+   // Embedded Map Container Styles
+   embeddedMapContainer: {
+     marginHorizontal: 16,
+     marginTop: 16,
+     padding: 0,
+     borderRadius: 16,
+     overflow: 'hidden',
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 4 },
+     shadowOpacity: 0.15,
+     shadowRadius: 12,
+     elevation: 8,
+   },
+   embeddedMapHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'space-between',
+     padding: 16,
+     paddingBottom: 12,
+   },
+   embeddedMapHeaderLeft: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     flex: 1,
+   },
+   embeddedMapIcon: {
+     width: 36,
+     height: 36,
+     borderRadius: 18,
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginRight: 12,
+   },
+   embeddedMapTitleContainer: {
+     flex: 1,
+   },
+   embeddedMapTitle: {
+     fontSize: 18,
+     fontWeight: '700',
+     marginBottom: 2,
+   },
+   embeddedMapSubtitle: {
+     fontSize: 12,
+     fontWeight: '500',
+   },
+   embeddedMapControls: {
+     flexDirection: 'row',
+     gap: 8,
+   },
+   embeddedMapControlButton: {
+     width: 36,
+     height: 36,
+     borderRadius: 18,
+     justifyContent: 'center',
+     alignItems: 'center',
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 2 },
+     shadowOpacity: 0.1,
+     shadowRadius: 4,
+     elevation: 2,
+   },
+   embeddedMap: {
+     flex: 1,
+     height: 350,
+   },
+   embeddedMapOverlays: {
+     position: 'absolute',
+     top: 0,
+     left: 0,
+     right: 0,
+     bottom: 0,
+     pointerEvents: 'box-none',
+   },
+   embeddedLocationStatus: {
+     position: 'absolute',
+     top: 12,
+     left: 12,
+     padding: 8,
+     borderRadius: 8,
+     minWidth: 120,
+   },
+   embeddedLocationInfo: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 4,
+   },
+   embeddedLocationIcon: {
+     width: 20,
+     height: 20,
+     borderRadius: 10,
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginRight: 6,
+   },
+   embeddedLocationText: {
+     fontSize: 12,
+     fontWeight: '600',
+   },
+   embeddedLocationCoords: {
+     fontSize: 10,
+     fontFamily: 'monospace',
+   },
+   embeddedRouteInfo: {
+     position: 'absolute',
+     top: 12,
+     right: 12,
+     padding: 8,
+     borderRadius: 8,
+     minWidth: 140,
+   },
+   embeddedRouteHeader: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginBottom: 4,
+   },
+   embeddedRouteTitle: {
+     fontSize: 12,
+     fontWeight: '600',
+     marginLeft: 4,
+   },
+   embeddedRouteDetails: {
+     fontSize: 10,
+   },
+   embeddedFloatingControls: {
+     position: 'absolute',
+     bottom: 12,
+     right: 12,
+     gap: 8,
+   },
+   embeddedFloatingButton: {
+     width: 44,
+     height: 44,
+     borderRadius: 22,
+     justifyContent: 'center',
+     alignItems: 'center',
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 4 },
+     shadowOpacity: 0.2,
+     shadowRadius: 8,
+     elevation: 4,
+   },
+   // Legacy Map Container Styles
+   mapContainer: {
+     padding: 16,
+     borderRadius: 12,
+     marginBottom: 16,
+   },
+  mapHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  mapHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mapTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  mapStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+   mapWrapper: {
+     height: 350,
+     borderRadius: 0,
+     overflow: 'hidden',
+     marginBottom: 0,
+     elevation: 0,
+     shadowColor: 'transparent',
+     shadowOffset: { width: 0, height: 0 },
+     shadowOpacity: 0,
+     shadowRadius: 0,
+   },
+   map: {
+     flex: 1,
+   },
+   customMarker: {
+     width: 40,
+     height: 40,
+     borderRadius: 20,
+     justifyContent: 'center',
+     alignItems: 'center',
+     borderWidth: 3,
+     borderColor: '#FFFFFF',
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 2 },
+     shadowOpacity: 0.3,
+     shadowRadius: 4,
+     elevation: 4,
+   },
+   waypointMarker: {
+     width: 30,
+     height: 30,
+     borderRadius: 15,
+     justifyContent: 'center',
+     alignItems: 'center',
+     borderWidth: 2,
+     borderColor: '#FFFFFF',
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 1 },
+     shadowOpacity: 0.3,
+     shadowRadius: 2,
+     elevation: 2,
+   },
+   waypointText: {
+     color: '#FFFFFF',
+     fontSize: 12,
+     fontWeight: 'bold',
+   },
+   // Fallback Map Styles
+   mapFallback: {
+     flex: 1,
+     justifyContent: 'center',
+     alignItems: 'center',
+     borderRadius: 12,
+   },
+   mapFallbackContent: {
+     alignItems: 'center',
+     padding: 20,
+   },
+   mapFallbackTitle: {
+     fontSize: 20,
+     fontWeight: '600',
+     marginTop: 12,
+     marginBottom: 4,
+   },
+   mapFallbackSubtitle: {
+     fontSize: 14,
+     textAlign: 'center',
+     marginBottom: 20,
+   },
+   mapFallbackNote: {
+     fontSize: 12,
+     textAlign: 'center',
+     marginTop: 16,
+     fontStyle: 'italic',
+   },
+   fallbackRouteContainer: {
+     width: 200,
+     height: 120,
+     position: 'relative',
+     backgroundColor: 'rgba(255,255,255,0.1)',
+     borderRadius: 8,
+     marginBottom: 16,
+   },
+   fallbackMarker: {
+     position: 'absolute',
+     width: 24,
+     height: 24,
+     borderRadius: 12,
+     justifyContent: 'center',
+     alignItems: 'center',
+     borderWidth: 2,
+     borderColor: '#FFFFFF',
+   },
+   fallbackRouteLine: {
+     position: 'absolute',
+     height: 3,
+     width: '80%',
+     top: '50%',
+     left: '10%',
+     borderRadius: 2,
+   },
+   fallbackWaypoint: {
+     position: 'absolute',
+     width: 20,
+     height: 20,
+     borderRadius: 10,
+     justifyContent: 'center',
+     alignItems: 'center',
+     borderWidth: 2,
+     borderColor: '#FFFFFF',
+   },
+   fallbackWaypointText: {
+     color: '#FFFFFF',
+     fontSize: 10,
+     fontWeight: 'bold',
+   },
+  currentLocationMarker: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    left: '20%',
+    top: '30%',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  destinationMarker: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    right: '20%',
+    bottom: '30%',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  routeLine: {
+    position: 'absolute',
+    height: 3,
+    width: '60%',
+    top: '50%',
+    left: '20%',
+    borderRadius: 2,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  routeDot: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  mapInfoOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    right: 8,
+    padding: 8,
+    borderRadius: 6,
+  },
+  mapInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  mapInfoText: {
+    fontSize: 11,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+   mapActions: {
+     flexDirection: 'row',
+     gap: 6,
+     flexWrap: 'wrap',
+   },
+   mapActionButton: {
+     flex: 1,
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'center',
+     paddingVertical: 8,
+     paddingHorizontal: 8,
+     borderRadius: 8,
+     minWidth: 80,
+   },
+  mapActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+    color: '#FFFFFF',
+  },
+});

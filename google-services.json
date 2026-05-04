@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "519432433636",
+    "project_id": "crashcue-projectid01",
+    "storage_bucket": "crashcue-projectid01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:519432433636:android:765010748721d6f86161f1",
+        "android_client_info": {
+          "package_name": "com.crashcue.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "519432433636-t7kdpti4t6vvubdu7d75g3iujriilmdq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.crashcue.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "519432433636-u77fv5bg9i627df25gf0vo416hrkruiu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAz6IWxnfw4iiZVqOto1EnSUYM_o6g4GLA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "519432433636-u77fv5bg9i627df25gf0vo416hrkruiu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

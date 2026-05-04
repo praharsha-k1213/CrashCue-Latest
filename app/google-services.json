@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "510306531514",
+    "project_id": "crashcue-b4929",
+    "storage_bucket": "crashcue-b4929.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:510306531514:android:0f27a08a06c08cbfc12a83",
+        "android_client_info": {
+          "package_name": "com.shatch.crashcue"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDppWLtsePp4CzUq0GCnhMMkCfR_TeHNdk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

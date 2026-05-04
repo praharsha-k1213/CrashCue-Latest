@@ -1,0 +1,90 @@
+﻿node.exe : 2026-03-21T
+07:27:03.224Z 
+expo:telemetry 
+Switching strategy 
+from detached to 
+instant
+At line:1 char:1
++ & "C:\Program Files\
+nodejs/node.exe" 
+"C:\Users\PRAHARSHA 
+KANAPARTHI\A ...
++ ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (2026-03-21   
+ T07:2...ched to i    
+nstant:String) []    
+, RemoteException
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+2026-03-21T07:27:03.41
+8Z expo:telemetry 
+Recording 1 event(s)
+2026-03-21T07:27:03.42
+5Z expo:env C:\CrashCu
+e+\android\.env does 
+not exist, skipping 
+this env file
+2026-03-21T07:27:03.42
+5Z expo:env C:\CrashCu
+e+\android\.env.develo
+pment does not exist, 
+skipping this env file
+2026-03-21T07:27:03.42
+5Z expo:env C:\CrashCu
+e+\android\.env.local 
+does not exist, 
+skipping this env file
+2026-03-21T07:27:03.42
+5Z expo:env C:\CrashCu
+e+\android\.env.develo
+pment.local does not 
+exist, skipping this 
+env file
+ConfigError: The 
+expected package.json 
+path: C:\CrashCue+\and
+roid\package.json 
+does not exist
+ConfigError: The 
+expected package.json 
+path: C:\CrashCue+\and
+roid\package.json 
+does not exist
+    at getRootPackageJ
+sonPath (C:\CrashCue+\
+node_modules\@expo\con
+fig\build\resolvePacka
+geJson.js:31:11)
+    at 
+getPackageJsonAndPath 
+(C:\CrashCue+\node_mod
+ules\@expo\config\buil
+d\Config.js:300:76)
+    at getPackageJson 
+(C:\CrashCue+\node_mod
+ules\@expo\config\buil
+d\Config.js:296:17)
+    at hasDirectDevCli
+entDependency (C:\Cras
+hCue+\node_modules\@ex
+po\cli\build\src\start
+\detectDevClient.js:39
+:86)
+    at 
+resolveOptionsAsync (C
+:\CrashCue+\node_modul
+es\@expo\cli\build\src
+\start\resolveOptions.
+js:68:135)
+    at expoStart (C:\C
+rashCue+\node_modules\
+@expo\cli\build\src\st
+art\index.js:140:27)
+

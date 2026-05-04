@@ -1,0 +1,164 @@
+# =========================
+# OS / SYSTEM
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# XCODE / iOS
+# =========================
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+project.xcworkspace
+/ios/Pods/
+
+# =========================
+# ANDROID / INTELLIJ
+# =========================
+.idea
+.gradle
+local.properties
+*.iml
+*.hprof
+.cxx/
+
+# 🔥 CRITICAL (missing earlier)
+android/build/
+android/app/build/
+
+# Keystores (keep debug only)
+*.keystore
+*.jks
+!debug.keystore
+
+# =========================
+# NODE / REACT NATIVE
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# =========================
+# BUILD OUTPUTS
+# =========================
+build/
+dist/
+web-build/
+.expo/
+.next
+.nuxt
+.cache
+.parcel-cache
+.out
+public
+coverage/
+
+# =========================
+# APK / AAB (VERY IMPORTANT)
+# =========================
+*.apk
+*.aab
+
+# =========================
+# LARGE FILES (prevent push errors)
+# =========================
+*.mp4
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.iso
+
+# =========================
+# LOGS / TEMP
+# =========================
+logs
+*.log
+tmp/
+temp/
+*.pid
+*.seed
+*.pid.lock
+
+# =========================
+# ENV FILES
+# =========================
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# =========================
+# TYPESCRIPT
+# =========================
+*.tsbuildinfo
+
+# =========================
+# METRO / EXPO
+# =========================
+.metro-health-check*
+expo-env.d.ts
+
+# =========================
+# FASTLANE
+# =========================
+*/fastlane/report.xml
+*/fastlane/Preview.html
+*/fastlane/screenshots
+*/fastlane/test_output
+
+# =========================
+# BUNDLES
+# =========================
+*.jsbundle
+*.tgz
+
+# =========================
+# CACHE
+# =========================
+.npm
+.eslintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# =========================
+# EDITORS
+# =========================
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =========================
+# MISC
+# =========================
+*.pem
+*.orig.*
+*.db
+.netlify

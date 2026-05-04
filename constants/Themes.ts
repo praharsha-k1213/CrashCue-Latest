@@ -1,0 +1,165 @@
+export interface ThemePalette {
+    name: string;
+    primary: string;
+    background: string;
+    backgroundHeader: string;
+    backgroundCard: string;
+    text: string;
+    textPrimary: string;
+    textSecondary: string;
+    textInverse: string;
+    border: string;
+    success: string;
+    warning: string;
+    error: string;
+    accent: string;
+    glow: string;
+    gradientColors: [string, string, ...string[]];
+    gradientStart?: { x: number; y: number };
+    gradientEnd?: { x: number; y: number };
+}
+
+export const Themes: Record<string, ThemePalette> = {
+    silver: {
+        name: 'Silver Brushed',
+        primary: '#333333',
+        background: '#ffffff',
+        backgroundHeader: '#f5f5f5',
+        backgroundCard: 'rgba(0, 0, 0, 0.05)',
+        text: '#121212',
+        textPrimary: '#121212',
+        textSecondary: 'rgba(0, 0, 0, 0.6)',
+        textInverse: '#ffffff',
+        border: 'rgba(0, 0, 0, 0.1)',
+        success: '#121212',
+        warning: '#121212',
+        error: '#FF3B30',
+        accent: '#555555',
+        glow: 'rgba(0, 0, 0, 0.1)',
+        gradientColors: ['#C0C0C0', '#FFFFFF'],
+        gradientStart: { x: 0, y: 0 },
+        gradientEnd: { x: 1, y: 0 },
+    },
+    champagne: {
+        name: 'Champagne Satin',
+        primary: '#8A7A5E',
+        background: '#ffffff',
+        backgroundHeader: '#fdfcf0',
+        backgroundCard: 'rgba(138, 122, 94, 0.05)',
+        text: '#4A412A',
+        textPrimary: '#4A412A',
+        textSecondary: 'rgba(74, 65, 42, 0.6)',
+        textInverse: '#ffffff',
+        border: 'rgba(138, 122, 94, 0.1)',
+        success: '#8A7A5E',
+        warning: '#8A7A5E',
+        error: '#FF3B30',
+        accent: '#C5B358',
+        glow: 'rgba(138, 122, 94, 0.2)',
+        gradientColors: ['#F7E7CE', '#FFFFFF'],
+        gradientStart: { x: 0, y: 0 },
+        gradientEnd: { x: 1, y: 0 },
+    },
+    platinum: {
+        name: 'Rose Platinum',
+        primary: '#6B5B5B',
+        background: '#ffffff',
+        backgroundHeader: '#fff5f5',
+        backgroundCard: 'rgba(229, 228, 226, 0.1)',
+        text: '#332E2E',
+        textPrimary: '#332E2E',
+        textSecondary: 'rgba(51, 46, 46, 0.6)',
+        textInverse: '#ffffff',
+        border: 'rgba(51, 46, 46, 0.1)',
+        success: '#6B5B5B',
+        warning: '#6B5B5B',
+        error: '#FF3B30',
+        accent: '#E5E4E2',
+        glow: 'rgba(212, 175, 175, 0.2)',
+        gradientColors: ['#E5E4E2', '#FFFFFF'],
+        gradientStart: { x: 0, y: 0 },
+        gradientEnd: { x: 1, y: 0 },
+    },
+    frost: {
+        name: 'Frost Blue',
+        primary: '#4682B4',
+        background: '#ffffff',
+        backgroundHeader: '#f0f8ff',
+        backgroundCard: 'rgba(70, 130, 180, 0.05)',
+        text: '#2C3E50',
+        textPrimary: '#2C3E50',
+        textSecondary: 'rgba(44, 62, 80, 0.6)',
+        textInverse: '#ffffff',
+        border: 'rgba(44, 62, 80, 0.1)',
+        success: '#4682B4',
+        warning: '#4682B4',
+        error: '#FF3B30',
+        accent: '#B0C4DE',
+        glow: 'rgba(70, 130, 180, 0.2)',
+        gradientColors: ['#F0F8FF', '#FFFFFF'],
+        gradientStart: { x: 0, y: 0 },
+        gradientEnd: { x: 1, y: 0 },
+    },
+    pearl: {
+        name: 'Pearl Onyx',
+        primary: '#121212',
+        background: '#ffffff',
+        backgroundHeader: '#f2f2f2',
+        backgroundCard: 'rgba(0, 0, 0, 0.03)',
+        text: '#121212',
+        textPrimary: '#121212',
+        textSecondary: 'rgba(0, 0, 0, 0.5)',
+        textInverse: '#ffffff',
+        border: 'rgba(0, 0, 0, 0.1)',
+        success: '#121212',
+        warning: '#121212',
+        error: '#FF3B30',
+        accent: '#E0E0E0',
+        glow: 'rgba(0, 0, 0, 0.05)',
+        gradientColors: ['#FDFDFD', '#D1D1D1'],
+        gradientStart: { x: 0, y: 0 },
+        gradientEnd: { x: 1, y: 0 },
+    },
+    titanium: {
+        name: 'Titanium Flux',
+        primary: '#00E0FF',
+        background: '#1a1a1a',
+        backgroundHeader: '#232323',
+        backgroundCard: 'rgba(255, 255, 255, 0.05)',
+        text: '#FFFFFF',
+        textPrimary: '#FFFFFF',
+        textSecondary: 'rgba(255, 255, 255, 0.6)',
+        textInverse: '#000000',
+        border: 'rgba(255, 255, 255, 0.1)',
+        success: '#00E0FF',
+        warning: '#00E0FF',
+        error: '#FF3B30',
+        accent: '#8e9eab',
+        glow: 'rgba(0, 224, 255, 0.2)',
+        gradientColors: ['#232526', '#414345'],
+        gradientStart: { x: 0, y: 0 },
+        gradientEnd: { x: 1, y: 0 },
+    },
+    obsidian: {
+        name: 'Obsidian Pro',
+        primary: '#FFFFFF',
+        background: '#000000',
+        backgroundHeader: '#0a0a0a',
+        backgroundCard: 'rgba(255, 255, 255, 0.1)',
+        text: '#FFFFFF',
+        textPrimary: '#FFFFFF',
+        textSecondary: 'rgba(255, 255, 255, 0.5)',
+        textInverse: '#121212',
+        border: 'rgba(255, 255, 255, 0.2)',
+        success: '#FFFFFF',
+        warning: '#FFFFFF',
+        error: '#FF3B30',
+        accent: '#FFFFFF',
+        glow: 'rgba(255, 255, 255, 0.2)',
+        gradientColors: ['#434343', '#000000'],
+        gradientStart: { x: 0, y: 0 },
+        gradientEnd: { x: 1, y: 0 },
+    },
+};
+
+export type ThemeKey = keyof typeof Themes;

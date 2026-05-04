@@ -1,0 +1,17 @@
+C:\CrashCue+\node_modules\getenv\index.js:70
+        throw new Error('GetEnv.NoBoolean: ' + value + ' is not a boolean.');
+        ^
+
+Error: GetEnv.NoBoolean: 1  is not a boolean.
+    at Object.boolish (C:\CrashCue+\node_modules\getenv\index.js:70:15)
+    at C:\CrashCue+\node_modules\getenv\index.js:84:27
+    at Object.<anonymous> (C:\CrashCue+\node_modules\@expo\cli\build\bin\cli:81:27)
+    at Module._compile (node:internal/modules/cjs/loader:1761:14)
+    at Object..js (node:internal/modules/cjs/loader:1893:10)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.require (node:internal/modules/cjs/loader:1504:12)
+
+Node.js v24.13.0
