@@ -54,7 +54,7 @@ export default function SettingsScreen() {
             className="absolute inset-0"
           />
         )}
-        
+
         <View
           className="absolute w-[300px] h-[300px] rounded-full -top-[100px] -left-[48px]"
           style={{ backgroundColor: primary + '26' }}

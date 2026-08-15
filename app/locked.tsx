@@ -149,7 +149,7 @@ export default function LockedScreen() {
 							backgroundColor: 'rgba(255,255,255,0.05)',
 							borderColor: 'rgba(255,255,255,0.1)'
 						}}
-						onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
+						onPress={() => router.replace('/(tabs)')}
 					>
 						<Text className="text-xs font-black tracking-wide" style={{ color: 'rgba(255,255,255,0.4)' }}>
 							Go Back

@@ -37,7 +37,7 @@ export default function AlertsScreen() {
         className="flex-row items-center justify-between px-5 pb-6 border-b"
         style={{ paddingTop: Math.max(insets.top + 10, 60), borderBottomColor: border, backgroundColor: backgroundHeader }}
       >
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} className="p-2">
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} className="p-2">
           <Ionicons name="chevron-back" size={24} color={primary} />
         </TouchableOpacity>
         <Text className="text-xs font-black tracking-widest" style={{ color: textPrimary }}>INCIDENT_LOGS</Text>

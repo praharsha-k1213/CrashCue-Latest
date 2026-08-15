@@ -146,7 +146,7 @@ export default function User() {
                 style={{ paddingTop: Math.max(insets.top + 10, 60), borderBottomColor: border, backgroundColor: backgroundHeader }}
             >
                 <TouchableOpacity
-                    onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
+                    onPress={() => router.replace('/(tabs)')}
                     className="p-2 mr-3"
                 >
                     <Ionicons name="chevron-back" size={24} color={primary} />

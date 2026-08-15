@@ -60,7 +60,22 @@
         }
       ],
       "expo-web-browser",
-      "./plugins/withCleartextTraffic.js"
+      "./plugins/withCleartextTraffic.js",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "EmergencyWidget",
+              "label": "CrashCue SOS",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "description": "Quick access to Emergency and I am Safe buttons",
+              "previewImage": "./assets/images/logo.png"
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

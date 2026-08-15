@@ -103,7 +103,7 @@ export default function DatabaseViewer() {
                 style={{ borderBottomColor: border, backgroundColor: backgroundHeader }}
             >
                 <TouchableOpacity
-                    onPress={() => router.replace('/auth/login')}
+                    onPress={() => router.replace('/(tabs)')}
                     className="w-10 h-10 rounded-full items-center justify-center"
                     style={{ backgroundColor: primary + '1A' }}
                 >

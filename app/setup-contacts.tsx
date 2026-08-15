@@ -259,7 +259,7 @@ export default function EmergencyContactsSetup() {
                 maxWidth: 300,
               }}
             >
-              These people will be called, SMS'd and WhatsApp'd instantly if a crash is detected.
+              These people will be called, SMS&apos;d and WhatsApp&apos;d instantly if a crash is detected.
             </Text>
           </Animated.View>
 

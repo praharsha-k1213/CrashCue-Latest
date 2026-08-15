@@ -7,6 +7,11 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
+// Widget Task Handler Registration
+import { registerWidgetTaskHandler } from 'react-native-android-widget';
+import { widgetTaskHandler } from '../widget/widget-task-handler';
+registerWidgetTaskHandler(widgetTaskHandler);
+
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { CrashDetectionProvider } from '../context/CrashDetectionContext';
 import { SpeedHistoryProvider } from '../context/SpeedHistoryContext';

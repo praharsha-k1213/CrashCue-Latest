@@ -478,7 +478,7 @@ export default function NexusDashboardScreen() {
         className="flex-row items-center justify-between px-5 pb-5 border-b"
         style={{ paddingTop: Math.max(insets.top + 10, 48), borderBottomColor: border, backgroundColor: backgroundHeader }}
       >
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} className="p-2">
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} className="p-2">
           <Ionicons name="arrow-back" color={primary} size={24} />
         </TouchableOpacity>
         <NeuralCore isListening={isListening} isLoading={isLoading} isSpeaking={isSpeaking} />
@@ -613,6 +613,7 @@ export default function NexusDashboardScreen() {
           style={{
             backgroundColor: backgroundCard + 'CC',
             borderColor: border,
+            // @ts-ignore - Web only property
             backdropFilter: Platform.OS === 'web' ? 'blur(20px)' : undefined,
           }}
         >

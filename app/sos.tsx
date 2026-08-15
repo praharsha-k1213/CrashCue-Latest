@@ -96,11 +96,7 @@ export default function SOSScreen() {
 	const handleCancel = useCallback(() => {
 		clearAutoTrigger();
 		resetCrashDetection();
-		if (router.canGoBack()) {
-			router.back();
-		} else {
-			router.replace('/(tabs)');
-		}
+		router.replace('/(tabs)');
 	}, [clearAutoTrigger, router, resetCrashDetection]);
 
 	useEffect(() => {

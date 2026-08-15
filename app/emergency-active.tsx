@@ -110,7 +110,7 @@ export default function EmergencyActiveScreen() {
         className="flex-row items-center justify-between px-5 pb-5 border-b"
         style={{ paddingTop: Math.max(insets.top + 10, 60), borderBottomColor: 'rgba(255,0,0,0.3)' }}
       >
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} className="p-2">
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} className="p-2">
           <Ionicons name="chevron-back" size={24} color="#FF0000" />
         </TouchableOpacity>
         <Text className="text-xs font-black tracking-widest text-red-500">ACTIVE_LINK</Text>
@@ -224,7 +224,7 @@ export default function EmergencyActiveScreen() {
           <TouchableOpacity
             className="py-4.5 rounded-2xl items-center border mt-5"
             style={{ backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }}
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
+            onPress={() => router.replace('/(tabs)')}
           >
             <Text className="text-white text-[13px] font-black tracking-widest">MISSION_ABORT_EXIT</Text>
           </TouchableOpacity>

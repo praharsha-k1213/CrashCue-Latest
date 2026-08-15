@@ -132,7 +132,7 @@ export default function EmergencyContactsScreen() {
         className="flex-row items-center justify-between px-5 pb-5 border-b"
         style={{ paddingTop: Math.max(insets.top + 10, 60), borderBottomColor: border }}
       >
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} className="p-2">
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} className="p-2">
           <Ionicons name="chevron-back" size={24} color={primary} />
         </TouchableOpacity>
         <Text className="text-sm font-black tracking-widest" style={{ color: textPrimary }}>TACTICAL_PROTOCOL_LINK</Text>

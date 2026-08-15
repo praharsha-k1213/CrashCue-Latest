@@ -132,7 +132,7 @@ export default function ModesScreen() {
       {/* Header */}
       <View className="px-5 pb-5 border-b" style={{ paddingTop: Math.max(insets.top + 10, 64), borderBottomColor: border }}>
         <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} className="w-10 h-10 rounded-full items-center justify-center border" style={{ backgroundColor: backgroundCard, borderColor: border }}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)')} className="w-10 h-10 rounded-full items-center justify-center border" style={{ backgroundColor: backgroundCard, borderColor: border }}>
             <Ionicons name="arrow-back" size={24} color={primary} />
           </TouchableOpacity>
           <Text className="text-lg font-black tracking-widest" style={{ color: textPrimary }}>DRIVING MODES</Text>
@@ -256,7 +256,7 @@ export default function ModesScreen() {
               className="w-full py-4 bg-red-500 rounded-xl items-center shadow-lg shadow-red-500/30"
               onPress={() => setShowAlert(false)}
             >
-              <Text className="text-white font-bold tracking-widest text-lg">I'M SAFE</Text>
+              <Text className="text-white font-bold tracking-widest text-lg">I&apos;M SAFE</Text>
             </TouchableOpacity>
           </Animated.View>
         </View>

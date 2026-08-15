@@ -190,7 +190,7 @@ export default function SpeedHistoryScreen() {
       <View className="px-5 pb-4 flex-row justify-between items-center z-10" style={{ paddingTop: Math.max(insets.top + 10, 56) }}>
         <TouchableOpacity 
           className={`w-12 h-12 rounded-full items-center justify-center ${neoShadow} bg-[#F2F6F9]`}
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
+          onPress={() => router.replace('/(tabs)')}
         >
           <Ionicons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
